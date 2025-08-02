@@ -15,7 +15,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var UserServiceInstance *UserService
+var UserServiceInstance = &UserService{}
 
 type UserService struct{}
 
@@ -118,4 +118,12 @@ func (me *UserService) DeleteUser(ctx context.Context, username string) error {
 	}
 
 	return nil
+}
+
+func (me *UserService) CheckUsername(ctx context.Context, username string) (bool, error) {
+	ok, err := queries.CheckUsername(ctx, username)
+	if err != nil {
+		return false, fmt.Errorf("error checking username: %w", err)
+	}
+	return ok, nil
 }

@@ -19,7 +19,8 @@ var (
 	PgName     = getEnvString("PgName", "url_shortener")
 	PgSSL      = getEnvString("PG_SSL_MODE", "disable")
 
-	JwtTokenExpirationDays = getEnvInt("JWT_TOKEN_EXPIRATION_DAYS", 7)
+	JwtTokenExpirationDays   = getEnvInt("JWT_TOKEN_EXPIRATION_DAYS", 7)
+	ShortUrlCollisionRetries = getEnvInt("SHORT_URL_COLLISION_RETRIES", 5)
 )
 
 func getEnvInt(key string, defaultValue ...int) int {

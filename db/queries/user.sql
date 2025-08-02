@@ -8,3 +8,6 @@ select * from users where username = $1;
 
 -- name: DeleteUserByUsername :execrows
 delete from users where username = $1;
+
+-- name: CheckUsername :one
+select exists (select 1 from users where username = $1 for update);

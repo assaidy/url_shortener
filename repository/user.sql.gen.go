@@ -9,6 +9,17 @@ import (
 	"context"
 )
 
+const checkUsername = `-- name: CheckUsername :one
+select exists (select 1 from users where username = $1 for update)
+`
+
+func (q *Queries) CheckUsername(ctx context.Context, username string) (bool, error) {
+	row := q.queryRow(ctx, q.checkUsernameStmt, checkUsername, username)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const deleteUserByUsername = `-- name: DeleteUserByUsername :execrows
 delete from users where username = $1
 `

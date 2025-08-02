@@ -13,11 +13,13 @@ var (
 	validatorInstance  = validator.New()
 	usernameRegex      = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 	noOuterSpacesRegex = regexp.MustCompile(`^\S.*\S$|^\S+$`)
+	shortUrlRegex      = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 )
 
 func init() {
 	validatorInstance.RegisterValidation("customUsername", customUsername)
 	validatorInstance.RegisterValidation("customNoOuterSpaces", customNoOuterSpaces)
+	validatorInstance.RegisterValidation("customShortUrl", customShortUrl)
 }
 
 func customUsername(fl validator.FieldLevel) bool {
@@ -27,6 +29,11 @@ func customUsername(fl validator.FieldLevel) bool {
 func customNoOuterSpaces(fl validator.FieldLevel) bool {
 	val := fl.Field().String()
 	return val == "" || noOuterSpacesRegex.MatchString(val)
+}
+
+func customShortUrl(fl validator.FieldLevel) bool {
+	val := fl.Field().String()
+	return val == "" || shortUrlRegex.MatchString(val)
 }
 
 func ValidateStruct(s any) error {

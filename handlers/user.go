@@ -20,8 +20,7 @@ func HandleRegister(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid json body")
 	}
 
-	ctx := context.Background()
-	if err := services.UserServiceInstance.CreateUser(ctx, services.CreateUserParams{
+	if err := services.UserServiceInstance.CreateUser(context.Background(), services.CreateUserParams{
 		Username: req.Username,
 		Password: req.Password,
 	}); err != nil {
@@ -42,8 +41,7 @@ func HandleLogin(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid json body")
 	}
 
-	ctx := context.Background()
-	jwtToken, err := services.UserServiceInstance.AuthenticateUser(ctx, req.Username, req.Password)
+	jwtToken, err := services.UserServiceInstance.AuthenticateUser(context.Background(), req.Username, req.Password)
 	if err != nil {
 		return fromServiceError(err)
 	}
@@ -68,15 +66,20 @@ func WithJwt(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusUnauthorized)
 	}
 
+	if ok, err := services.UserServiceInstance.CheckUsername(context.Background(), claims.Username); err != nil {
+		return fromServiceError(err)
+	} else if !ok { // user was deleted before token expiration
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+
 	c.Locals(AuthedUsername, claims.Username)
 	return c.Next()
 }
 
 func HandleDeleteUser(c *fiber.Ctx) error {
-	username := c.Locals(AuthedUsername)
+	username := c.Locals(AuthedUsername).(string)
 
-	ctx := context.Background()
-	if err := services.UserServiceInstance.DeleteUser(ctx, username); err != nil {
+	if err := services.UserServiceInstance.DeleteUser(context.Background(), username); err != nil {
 		return fromServiceError(err)
 	}
 

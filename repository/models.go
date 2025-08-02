@@ -8,6 +8,18 @@ import (
 	"time"
 )
 
+type ShortUrl struct {
+	Username  string
+	LongUrl   string
+	ShortUrl  string
+	CreatedAt time.Time
+}
+
+type ShortUrlLength struct {
+	Length     int32
+	LastUpdate time.Time
+}
+
 type User struct {
 	Username       string
 	HashedPassword string

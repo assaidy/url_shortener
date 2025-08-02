@@ -36,11 +36,14 @@ func registerRoutes(router *fiber.App) {
 	router.Post("/users/register", handlers.HandleRegister)
 	router.Post("/users/login", handlers.HandleLogin)
 	router.Delete("/users", handlers.WithJwt, handlers.HandleDeleteUser)
+
+	router.Post("/urls", handlers.WithJwt, handlers.HandleCreateShortUrl)
 }
 
 func main() {
 	services := []services.Service{
 		services.UserServiceInstance,
+		services.UrlServiceInstance,
 	}
 
 	for index, it := range services {

@@ -24,11 +24,26 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
+	if q.checkShortUrlStmt, err = db.PrepareContext(ctx, checkShortUrl); err != nil {
+		return nil, fmt.Errorf("error preparing query CheckShortUrl: %w", err)
+	}
+	if q.checkUsernameStmt, err = db.PrepareContext(ctx, checkUsername); err != nil {
+		return nil, fmt.Errorf("error preparing query CheckUsername: %w", err)
+	}
 	if q.deleteUserByUsernameStmt, err = db.PrepareContext(ctx, deleteUserByUsername); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteUserByUsername: %w", err)
 	}
+	if q.getShortUrlLengthStmt, err = db.PrepareContext(ctx, getShortUrlLength); err != nil {
+		return nil, fmt.Errorf("error preparing query GetShortUrlLength: %w", err)
+	}
 	if q.getUserByUsernameStmt, err = db.PrepareContext(ctx, getUserByUsername); err != nil {
 		return nil, fmt.Errorf("error preparing query GetUserByUsername: %w", err)
+	}
+	if q.incrementShortUrlLengthStmt, err = db.PrepareContext(ctx, incrementShortUrlLength); err != nil {
+		return nil, fmt.Errorf("error preparing query IncrementShortUrlLength: %w", err)
+	}
+	if q.insertShortUrlStmt, err = db.PrepareContext(ctx, insertShortUrl); err != nil {
+		return nil, fmt.Errorf("error preparing query InsertShortUrl: %w", err)
 	}
 	if q.insertUserStmt, err = db.PrepareContext(ctx, insertUser); err != nil {
 		return nil, fmt.Errorf("error preparing query InsertUser: %w", err)
@@ -38,14 +53,39 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 
 func (q *Queries) Close() error {
 	var err error
+	if q.checkShortUrlStmt != nil {
+		if cerr := q.checkShortUrlStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing checkShortUrlStmt: %w", cerr)
+		}
+	}
+	if q.checkUsernameStmt != nil {
+		if cerr := q.checkUsernameStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing checkUsernameStmt: %w", cerr)
+		}
+	}
 	if q.deleteUserByUsernameStmt != nil {
 		if cerr := q.deleteUserByUsernameStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteUserByUsernameStmt: %w", cerr)
 		}
 	}
+	if q.getShortUrlLengthStmt != nil {
+		if cerr := q.getShortUrlLengthStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getShortUrlLengthStmt: %w", cerr)
+		}
+	}
 	if q.getUserByUsernameStmt != nil {
 		if cerr := q.getUserByUsernameStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getUserByUsernameStmt: %w", cerr)
+		}
+	}
+	if q.incrementShortUrlLengthStmt != nil {
+		if cerr := q.incrementShortUrlLengthStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing incrementShortUrlLengthStmt: %w", cerr)
+		}
+	}
+	if q.insertShortUrlStmt != nil {
+		if cerr := q.insertShortUrlStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing insertShortUrlStmt: %w", cerr)
 		}
 	}
 	if q.insertUserStmt != nil {
@@ -90,19 +130,29 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                       DBTX
-	tx                       *sql.Tx
-	deleteUserByUsernameStmt *sql.Stmt
-	getUserByUsernameStmt    *sql.Stmt
-	insertUserStmt           *sql.Stmt
+	db                          DBTX
+	tx                          *sql.Tx
+	checkShortUrlStmt           *sql.Stmt
+	checkUsernameStmt           *sql.Stmt
+	deleteUserByUsernameStmt    *sql.Stmt
+	getShortUrlLengthStmt       *sql.Stmt
+	getUserByUsernameStmt       *sql.Stmt
+	incrementShortUrlLengthStmt *sql.Stmt
+	insertShortUrlStmt          *sql.Stmt
+	insertUserStmt              *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                       tx,
-		tx:                       tx,
-		deleteUserByUsernameStmt: q.deleteUserByUsernameStmt,
-		getUserByUsernameStmt:    q.getUserByUsernameStmt,
-		insertUserStmt:           q.insertUserStmt,
+		db:                          tx,
+		tx:                          tx,
+		checkShortUrlStmt:           q.checkShortUrlStmt,
+		checkUsernameStmt:           q.checkUsernameStmt,
+		deleteUserByUsernameStmt:    q.deleteUserByUsernameStmt,
+		getShortUrlLengthStmt:       q.getShortUrlLengthStmt,
+		getUserByUsernameStmt:       q.getUserByUsernameStmt,
+		incrementShortUrlLengthStmt: q.incrementShortUrlLengthStmt,
+		insertShortUrlStmt:          q.insertShortUrlStmt,
+		insertUserStmt:              q.insertUserStmt,
 	}
 }
