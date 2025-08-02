@@ -71,10 +71,11 @@ func (me *UrlService) CreateShortUrl(ctx context.Context, params CreateShortUrlP
 			if success {
 				break
 			}
-			if err := qtx.IncrementShortUrlLength(ctx); err != nil {
+			newlength, err := qtx.IncrementShortUrlLength(ctx)
+			if err != nil {
 				return "", fmt.Errorf("error incrementing short url length: %w", err)
 			}
-			shortUrlLength += 1
+			shortUrlLength += newlength
 		}
 	}
 

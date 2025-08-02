@@ -31,16 +31,19 @@ func (q *Queries) GetShortUrlLength(ctx context.Context) (int32, error) {
 	return length, err
 }
 
-const incrementShortUrlLength = `-- name: IncrementShortUrlLength :exec
+const incrementShortUrlLength = `-- name: IncrementShortUrlLength :one
 update short_url_length 
 set 
     length = length + 1,
     last_update = now()
+returning length
 `
 
-func (q *Queries) IncrementShortUrlLength(ctx context.Context) error {
-	_, err := q.exec(ctx, q.incrementShortUrlLengthStmt, incrementShortUrlLength)
-	return err
+func (q *Queries) IncrementShortUrlLength(ctx context.Context) (int32, error) {
+	row := q.queryRow(ctx, q.incrementShortUrlLengthStmt, incrementShortUrlLength)
+	var length int32
+	err := row.Scan(&length)
+	return length, err
 }
 
 const insertShortUrl = `-- name: InsertShortUrl :exec

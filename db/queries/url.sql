@@ -8,8 +8,9 @@ values ($1, $2, $3);
 -- name: GetShortUrlLength :one
 select length from short_url_length for update;
 
--- name: IncrementShortUrlLength :exec
+-- name: IncrementShortUrlLength :one
 update short_url_length 
 set 
     length = length + 1,
-    last_update = now();
+    last_update = now()
+returning length;
