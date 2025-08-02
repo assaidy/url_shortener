@@ -18,6 +18,8 @@ var (
 	PgPassword = getEnvString("PG_PASSWORD")
 	PgName     = getEnvString("PgName", "url_shortener")
 	PgSSL      = getEnvString("PG_SSL_MODE", "disable")
+
+	JwtTokenExpirationDays = getEnvInt("JWT_TOKEN_EXPIRATION_DAYS", 7)
 )
 
 func getEnvInt(key string, defaultValue ...int) int {

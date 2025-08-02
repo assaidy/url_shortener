@@ -38,3 +38,6 @@ goose-reset:
 goose-migration:
 	@if [ -z "$(name)" ]; then echo "ERROR: 'name' variable is required." && exit 1; fi
 	@$(GOOSE_ENV) goose create -s $(name) sql
+
+sqlc:
+	@sqlc generate

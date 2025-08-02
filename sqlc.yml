@@ -8,6 +8,8 @@ sql:
         package: "repository"
         out: "./repository/"
         output_files_suffix: ".gen"
+        emit_prepared_queries: true
+        emit_empty_slices: true
         overrides:
           - db_type: "uuid"
             go_type:
