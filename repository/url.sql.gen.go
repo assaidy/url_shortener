@@ -20,6 +20,17 @@ func (q *Queries) CheckShortUrl(ctx context.Context, shortUrl string) (bool, err
 	return exists, err
 }
 
+const getLongUrl = `-- name: GetLongUrl :one
+select long_url from short_urls where short_url = $1
+`
+
+func (q *Queries) GetLongUrl(ctx context.Context, shortUrl string) (string, error) {
+	row := q.queryRow(ctx, q.getLongUrlStmt, getLongUrl, shortUrl)
+	var long_url string
+	err := row.Scan(&long_url)
+	return long_url, err
+}
+
 const getShortUrlLength = `-- name: GetShortUrlLength :one
 select length from short_url_length for update
 `

@@ -33,3 +33,14 @@ func HandleCreateShortUrl(c *fiber.Ctx) error {
 		"shortUrl": shortUrl,
 	})
 }
+
+func HandleRedirectShortUrl(c *fiber.Ctx) error {
+	shortUrl := c.Params("short_url")
+
+	longUrl, err := services.UrlServiceInstance.GetLongUrl(context.Background(), shortUrl)
+	if err != nil {
+		return fromServiceError(err)
+	}
+
+	return c.Redirect(longUrl)
+}

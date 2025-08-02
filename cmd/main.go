@@ -38,6 +38,7 @@ func registerRoutes(router *fiber.App) {
 	router.Delete("/users", handlers.WithJwt, handlers.HandleDeleteUser)
 
 	router.Post("/urls", handlers.WithJwt, handlers.HandleCreateShortUrl)
+	router.Get("/urls/:short_url", handlers.HandleRedirectShortUrl)
 }
 
 func main() {

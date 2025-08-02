@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -103,4 +105,17 @@ func generateRandomShortUrl(length int) string {
 		buf[i] = charRange[n.Int64()]
 	}
 	return string(buf)
+}
+
+func (me *UrlService) GetLongUrl(ctx context.Context, shortUrl string) (string, error) {
+	// TODO: lookup cache first
+	longUrl, err := queries.GetLongUrl(ctx, shortUrl)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("%w: url not found", NotFoundErr)
+		}
+		return "", fmt.Errorf("error getting long url: %w", err)
+	}
+
+	return longUrl, nil
 }

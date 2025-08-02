@@ -5,6 +5,9 @@ select exists (select 1 from short_urls where short_url = $1 for update);
 insert into short_urls (username, long_url, short_url)
 values ($1, $2, $3);
 
+-- name: GetLongUrl :one
+select long_url from short_urls where short_url = $1;
+
 -- name: GetShortUrlLength :one
 select length from short_url_length for update;
 

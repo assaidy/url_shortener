@@ -33,6 +33,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.deleteUserByUsernameStmt, err = db.PrepareContext(ctx, deleteUserByUsername); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteUserByUsername: %w", err)
 	}
+	if q.getLongUrlStmt, err = db.PrepareContext(ctx, getLongUrl); err != nil {
+		return nil, fmt.Errorf("error preparing query GetLongUrl: %w", err)
+	}
 	if q.getShortUrlLengthStmt, err = db.PrepareContext(ctx, getShortUrlLength); err != nil {
 		return nil, fmt.Errorf("error preparing query GetShortUrlLength: %w", err)
 	}
@@ -66,6 +69,11 @@ func (q *Queries) Close() error {
 	if q.deleteUserByUsernameStmt != nil {
 		if cerr := q.deleteUserByUsernameStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteUserByUsernameStmt: %w", cerr)
+		}
+	}
+	if q.getLongUrlStmt != nil {
+		if cerr := q.getLongUrlStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getLongUrlStmt: %w", cerr)
 		}
 	}
 	if q.getShortUrlLengthStmt != nil {
@@ -135,6 +143,7 @@ type Queries struct {
 	checkShortUrlStmt           *sql.Stmt
 	checkUsernameStmt           *sql.Stmt
 	deleteUserByUsernameStmt    *sql.Stmt
+	getLongUrlStmt              *sql.Stmt
 	getShortUrlLengthStmt       *sql.Stmt
 	getUserByUsernameStmt       *sql.Stmt
 	incrementShortUrlLengthStmt *sql.Stmt
@@ -149,6 +158,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		checkShortUrlStmt:           q.checkShortUrlStmt,
 		checkUsernameStmt:           q.checkUsernameStmt,
 		deleteUserByUsernameStmt:    q.deleteUserByUsernameStmt,
+		getLongUrlStmt:              q.getLongUrlStmt,
 		getShortUrlLengthStmt:       q.getShortUrlLengthStmt,
 		getUserByUsernameStmt:       q.getUserByUsernameStmt,
 		incrementShortUrlLengthStmt: q.incrementShortUrlLengthStmt,
