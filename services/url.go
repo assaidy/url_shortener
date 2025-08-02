@@ -61,7 +61,7 @@ func (me *UrlService) CreateShortUrl(ctx context.Context, params CreateShortUrlP
 
 		success := false
 		for {
-			for i := 0; i < config.ShortUrlCollisionRetries && !success; i++ {
+			for i := 0; i < config.RandomUrlCollisionRetries && !success; i++ {
 				shortUrl = generateRandomShortUrl(int(shortUrlLength))
 
 				if ok, err := qtx.CheckShortUrl(ctx, shortUrl); err != nil {
@@ -116,6 +116,8 @@ func (me *UrlService) GetLongUrl(ctx context.Context, shortUrl string) (string, 
 		}
 		return "", fmt.Errorf("error getting long url: %w", err)
 	}
+
+	// TODO: collect analytics
 
 	return longUrl, nil
 }
