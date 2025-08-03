@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"time"
 
 	"github.com/assaidy/url_shortener/services"
 	"github.com/gofiber/fiber/v2"
@@ -41,6 +42,12 @@ func HandleRedirectShortUrl(c *fiber.Ctx) error {
 	if err != nil {
 		return fromServiceError(err)
 	}
+
+	services.UrlServiceInstance.StoreUrlVisit(services.UrlVisit{
+		ShorUrl:   shortUrl,
+		VisitorIp: c.IP(), // NOTE: read docs of this func
+		VisitedAt: time.Now().UTC(),
+	})
 
 	return c.Redirect(longUrl)
 }

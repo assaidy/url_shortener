@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
+	"time"
 
 	"github.com/assaidy/url_shortener/config"
 	"github.com/assaidy/url_shortener/db"
@@ -17,15 +19,68 @@ import (
 
 var UrlServiceInstance = &UrlService{}
 
-type UrlService struct{}
+type UrlService struct {
+	urlVisitChan       chan UrlVisit
+	urlVisitWorkerDone chan struct{}
+}
 
 func (me *UrlService) Start() error {
-	slog.Info("url service started")
+	me.urlVisitChan = make(chan UrlVisit, 10_000)
+	me.urlVisitWorkerDone = make(chan struct{}, 1)
+	me.startUrlVisitWorker()
+
 	return nil
 }
 
 func (me *UrlService) Stop() {
-	slog.Info("url service stopped")
+	close(me.urlVisitChan)
+	<-me.urlVisitWorkerDone
+}
+
+type UrlVisit struct {
+	ShorUrl   string
+	VisitorIp string
+	VisitedAt time.Time
+}
+
+func (me *UrlService) startUrlVisitWorker() {
+	go func() {
+		buffCap := 1000
+		buffIndex := 0
+		buff := make([]UrlVisit, buffCap)
+
+		for visit := range me.urlVisitChan {
+			buff[buffIndex] = visit
+			buffIndex += 1
+
+			if buffIndex == buffCap {
+				flushUrlVisitBuffer(buff)
+				buffIndex = 0
+			}
+		}
+		flushUrlVisitBuffer(buff[0:buffIndex])
+
+		me.urlVisitWorkerDone <- struct{}{}
+	}()
+}
+
+func flushUrlVisitBuffer(buff []UrlVisit) {
+	if len(buff) > 0 {
+		query := generateUrlVisitQuery(buff)
+		if _, err := db.Connection.ExecContext(context.Background(), query); err != nil {
+			slog.Error("error inserting url visits", "err", err)
+		}
+	}
+}
+
+func generateUrlVisitQuery(buff []UrlVisit) string {
+	builder := make([]string, len(buff)+1)
+	builder = append(builder, "insert into url_visits (short_url, visitor_ip, visited_at) values")
+	for _, it := range buff {
+		builder = append(builder, fmt.Sprintf("(%s, %s, %s)", it.ShorUrl, it.VisitorIp, it.VisitedAt))
+	}
+	builder = append(builder, ";")
+	return strings.Join(builder, "\n")
 }
 
 type CreateShortUrlParams struct {
@@ -117,7 +172,9 @@ func (me *UrlService) GetLongUrl(ctx context.Context, shortUrl string) (string, 
 		return "", fmt.Errorf("error getting long url: %w", err)
 	}
 
-	// TODO: collect analytics
-
 	return longUrl, nil
+}
+
+func (me *UrlService) StoreUrlVisit(visit UrlVisit) {
+	me.urlVisitChan <- visit
 }

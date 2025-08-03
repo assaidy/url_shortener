@@ -39,6 +39,7 @@ func registerRoutes(router *fiber.App) {
 
 	router.Post("/urls", handlers.WithJwt, handlers.HandleCreateShortUrl)
 	router.Get("/urls/:short_url", handlers.HandleRedirectShortUrl)
+	// NOTE: for now, i prefer to keep analytics only accecible form db
 }
 
 func main() {
@@ -47,9 +48,10 @@ func main() {
 		services.UrlServiceInstance,
 	}
 
+	slog.Info("starting all services...", "PID", os.Getpid())
 	for index, it := range services {
 		if err := it.Start(); err != nil {
-			slog.Error("error starting service", "index", index, "err", err)
+			slog.Error("error starting service", "index", index, "err", err, "PID", os.Getpid())
 			os.Exit(1)
 		}
 	}
@@ -74,15 +76,14 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	slog.Info("starting server shutdown...")
-
-	for _, it := range services {
-		it.Stop()
+	if err := app.ShutdownWithTimeout(2 * time.Second); err != nil {
+		slog.Error("error shutdown server", "err", err, "PID", os.Getpid())
+	} else {
+		slog.Info("server shutdown completed successfully", "PID", os.Getpid())
 	}
 
-	if err := app.ShutdownWithTimeout(2 * time.Second); err != nil {
-		slog.Error("error shutdown server", "err", err)
-	} else {
-		slog.Info("server shutdown completed successfully", "pid", os.Getpid())
+	slog.Info("stopping all services...", "PID", os.Getpid())
+	for _, it := range services {
+		it.Stop()
 	}
 }

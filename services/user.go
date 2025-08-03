@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/assaidy/url_shortener/config"
@@ -19,14 +18,8 @@ var UserServiceInstance = &UserService{}
 
 type UserService struct{}
 
-func (me *UserService) Start() error {
-	slog.Info("user service started")
-	return nil
-}
-
-func (me *UserService) Stop() {
-	slog.Info("user service stopped")
-}
+func (me *UserService) Start() error { return nil }
+func (me *UserService) Stop()        {}
 
 type CreateUserParams struct {
 	Username string `validate:"required,customUsername,max=20"`

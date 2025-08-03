@@ -20,6 +20,12 @@ type ShortUrlLength struct {
 	LastUpdate time.Time
 }
 
+type UrlVisit struct {
+	ShortUrl  string
+	VisitorIp string
+	VisitedAt time.Time
+}
+
 type User struct {
 	Username       string
 	HashedPassword string
