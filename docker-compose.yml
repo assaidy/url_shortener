@@ -1,7 +1,7 @@
 services:
   postgres_db:
     image: postgres:17
-    restart: always
+    restart: "no"
     environment:
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
@@ -14,3 +14,12 @@ services:
       - "${PG_PORT}:5432"
     volumes:
       - "${PG_DATA_PATH}:/var/lib/postgresql/data"
+
+  valkey_cache:
+    image: valkey/valkey:8
+    restart: "no"
+    ports:
+      - "${VALKEY_PORT}:6379"
+    command: valkey-server --save 60 1 --loglevel warning
+    volumes:
+      - "${VALKEY_DATA_PATH}:/data"

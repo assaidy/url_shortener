@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/assaidy/url_shortener/config"
-	"github.com/assaidy/url_shortener/repository"
+	"github.com/assaidy/url_shortener/db/postgres"
+	"github.com/assaidy/url_shortener/repository/postgres"
 	"github.com/assaidy/url_shortener/utils"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -16,10 +17,19 @@ import (
 
 var UserServiceInstance = &UserService{}
 
-type UserService struct{}
+type UserService struct {
+	db      *sql.DB
+	queries *postgres_repo.Queries
+}
 
-func (me *UserService) Start() error { return nil }
-func (me *UserService) Stop()        {}
+func (me *UserService) Start() error {
+	me.db = postgres_db.DB
+	me.queries = postgres_repo.New(me.db)
+
+	return nil
+}
+
+func (me *UserService) Stop() {}
 
 type CreateUserParams struct {
 	Username string `validate:"required,customUsername,max=20"`
@@ -36,7 +46,7 @@ func (me *UserService) CreateUser(ctx context.Context, params CreateUserParams) 
 		return fmt.Errorf("error hashing password: %w", err)
 	}
 
-	numAffectedRows, err := queries.InsertUser(ctx, repository.InsertUserParams{
+	numAffectedRows, err := me.queries.InsertUser(ctx, postgres_repo.InsertUserParams{
 		Username:       params.Username,
 		HashedPassword: string(hashedPassword),
 	})
@@ -49,7 +59,7 @@ func (me *UserService) CreateUser(ctx context.Context, params CreateUserParams) 
 
 // checks username and password, and returns a jwt token if authenticated
 func (me *UserService) AuthenticateUser(ctx context.Context, username string, password string) (string, error) {
-	user, err := queries.GetUserByUsername(ctx, username)
+	user, err := me.queries.GetUserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", fmt.Errorf("%w: %s", UnauthorizedErr, "invalid username")
@@ -64,7 +74,7 @@ func (me *UserService) AuthenticateUser(ctx context.Context, username string, pa
 	token, err := generateJWTAccessToken(JwtClaims{
 		Username: user.Username,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(config.JwtTokenExpirationDays) * time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(config.JwtTokenExpiration) * time.Minute)),
 		},
 	})
 	if err != nil {
@@ -104,7 +114,7 @@ func (me *UserService) ParseJwtTokenString(tokenString string) (*JwtClaims, erro
 }
 
 func (me *UserService) DeleteUser(ctx context.Context, username string) error {
-	if numAffectedRows, err := queries.DeleteUserByUsername(ctx, username); err != nil {
+	if numAffectedRows, err := me.queries.DeleteUserByUsername(ctx, username); err != nil {
 		return fmt.Errorf("error checking username: %w", err)
 	} else if numAffectedRows == 0 {
 		return fmt.Errorf("%w: user not found", NotFoundErr)
@@ -114,7 +124,7 @@ func (me *UserService) DeleteUser(ctx context.Context, username string) error {
 }
 
 func (me *UserService) CheckUsername(ctx context.Context, username string) (bool, error) {
-	ok, err := queries.CheckUsername(ctx, username)
+	ok, err := me.queries.CheckUsername(ctx, username)
 	if err != nil {
 		return false, fmt.Errorf("error checking username: %w", err)
 	}

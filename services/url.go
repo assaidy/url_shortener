@@ -8,23 +8,33 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
-	"strings"
+	"os"
 	"time"
 
+	"github.com/assaidy/url_shortener/cache"
 	"github.com/assaidy/url_shortener/config"
-	"github.com/assaidy/url_shortener/db"
-	"github.com/assaidy/url_shortener/repository"
+	"github.com/assaidy/url_shortener/db/postgres"
+	"github.com/assaidy/url_shortener/repository/postgres"
 	"github.com/assaidy/url_shortener/utils"
+	"github.com/valkey-io/valkey-go"
 )
 
 var UrlServiceInstance = &UrlService{}
 
 type UrlService struct {
+	db      *sql.DB
+	queries *postgres_repo.Queries
+	cache   valkey.Client
+
 	urlVisitChan       chan UrlVisit
 	urlVisitWorkerDone chan struct{}
 }
 
 func (me *UrlService) Start() error {
+	me.db = postgres_db.DB
+	me.queries = postgres_repo.New(me.db)
+	me.cache = cache.Valkey
+
 	me.urlVisitChan = make(chan UrlVisit, 10_000)
 	me.urlVisitWorkerDone = make(chan struct{}, 1)
 	me.startUrlVisitWorker()
@@ -54,33 +64,30 @@ func (me *UrlService) startUrlVisitWorker() {
 			buffIndex += 1
 
 			if buffIndex == buffCap {
-				flushUrlVisitBuffer(buff)
+				me.flushUrlVisitBuffer(buff)
 				buffIndex = 0
 			}
 		}
-		flushUrlVisitBuffer(buff[0:buffIndex])
+		me.flushUrlVisitBuffer(buff[0:buffIndex])
 
 		me.urlVisitWorkerDone <- struct{}{}
 	}()
 }
 
-func flushUrlVisitBuffer(buff []UrlVisit) {
+func (me *UrlService) flushUrlVisitBuffer(buff []UrlVisit) {
 	if len(buff) > 0 {
-		query := generateUrlVisitQuery(buff)
-		if _, err := db.Connection.ExecContext(context.Background(), query); err != nil {
-			slog.Error("error inserting url visits", "err", err)
+		for _, it := range buff {
+			// TODO: this is terrible. use bulk insert
+			if err := me.queries.InsertUrlVisits(context.Background(), postgres_repo.InsertUrlVisitsParams{
+				ShortUrl:  it.ShorUrl,
+				VisitorIp: it.VisitorIp,
+				VisitedAt: it.VisitedAt,
+			}); err != nil {
+				slog.Error("error inserting url visits", "err", err)
+			}
 		}
+		slog.Info("url visits stored successfully" , "PID", os.Getpid())
 	}
-}
-
-func generateUrlVisitQuery(buff []UrlVisit) string {
-	builder := make([]string, len(buff)+1)
-	builder = append(builder, "insert into url_visits (short_url, visitor_ip, visited_at) values")
-	for _, it := range buff {
-		builder = append(builder, fmt.Sprintf("(%s, %s, %s)", it.ShorUrl, it.VisitorIp, it.VisitedAt))
-	}
-	builder = append(builder, ";")
-	return strings.Join(builder, "\n")
 }
 
 type CreateShortUrlParams struct {
@@ -94,12 +101,12 @@ func (me *UrlService) CreateShortUrl(ctx context.Context, params CreateShortUrlP
 		return "", fmt.Errorf("%w: %s", ValidationErr, err.Error())
 	}
 
-	tx, err := db.Connection.BeginTx(ctx, nil)
+	tx, err := me.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", fmt.Errorf("error beginning tx: %w", err)
 	}
 	defer tx.Rollback()
-	qtx := queries.WithTx(tx)
+	qtx := me.queries.WithTx(tx)
 
 	shortUrl := params.ShortUrl
 	if shortUrl != "" {
@@ -136,7 +143,7 @@ func (me *UrlService) CreateShortUrl(ctx context.Context, params CreateShortUrlP
 		}
 	}
 
-	if err := qtx.InsertShortUrl(ctx, repository.InsertShortUrlParams{
+	if err := qtx.InsertShortUrl(ctx, postgres_repo.InsertShortUrlParams{
 		Username: params.Username,
 		LongUrl:  params.LongUrl,
 		ShortUrl: shortUrl,
@@ -161,15 +168,32 @@ func generateRandomShortUrl(length int) string {
 	}
 	return string(buf)
 }
-
 func (me *UrlService) GetLongUrl(ctx context.Context, shortUrl string) (string, error) {
-	// TODO: lookup cache first
-	longUrl, err := queries.GetLongUrl(ctx, shortUrl)
+	val, err := me.cache.Do(ctx, me.cache.B().Get().Key(shortUrl).Build()).AsBytes()
+	if err == nil && val != nil {
+		return string(val), nil
+	}
+
+	slog.Warn("cache miss", "key", shortUrl)
+
+	longUrl, err := me.queries.GetLongUrl(ctx, shortUrl)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", fmt.Errorf("%w: url not found", NotFoundErr)
 		}
 		return "", fmt.Errorf("error getting long url: %w", err)
+	}
+
+	if _, err := me.cache.Do(
+		ctx,
+		me.cache.B().
+			Set().
+			Key(shortUrl).
+			Value(longUrl).
+			Ex(config.CacheTTL).
+			Build(),
+	).AsBytes(); err != nil {
+		slog.Error("error setting cache", "key", shortUrl, "value", longUrl, "err", err)
 	}
 
 	return longUrl, nil

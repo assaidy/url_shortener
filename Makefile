@@ -2,7 +2,7 @@ include .env
 
 GOOSE_DRIVER=postgres
 GOOSE_DBSTRING=postgresql://$(PG_USER):$(PG_PASSWORD)@$(PG_HOST):$(PG_PORT)/$(PG_NAME)?sslmode=$(PG_SSLMODE)
-GOOSE_MIGRATION_DIR=./db/migrations/
+GOOSE_MIGRATION_DIR=./db/postgres/migrations/
 GOOSE_ENV=GOOSE_DRIVER="$(GOOSE_DRIVER)" GOOSE_DBSTRING="$(GOOSE_DBSTRING)" GOOSE_MIGRATION_DIR="$(GOOSE_MIGRATION_DIR)"
 
 all: build
@@ -41,3 +41,6 @@ goose-migration:
 
 sqlc:
 	@sqlc generate
+
+psql:
+	@PGPASSWORD=$(PG_PASSWORD) psql -h $(PG_HOST) -p $(PG_PORT) -U $(PG_USER) -d $(PG_NAME)

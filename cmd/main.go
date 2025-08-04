@@ -12,7 +12,9 @@ import (
 	"github.com/assaidy/url_shortener/handlers"
 	"github.com/assaidy/url_shortener/services"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/storage/valkey"
 )
 
 func errorHandler(c *fiber.Ctx, err error) error {
@@ -31,6 +33,13 @@ func errorHandler(c *fiber.Ctx, err error) error {
 }
 
 func registerRoutes(router *fiber.App) {
+	withRedirectionRateLimit := limiter.New(limiter.Config{
+		Max:               config.RedirectionRateLimitMaxPerWindow,
+		Expiration:        config.RedirectionRateLimitWindow,
+		LimiterMiddleware: limiter.SlidingWindow{},
+		Storage:           valkey.New(valkey.Config{InitAddress: []string{config.ValkeyAddr}}),
+	})
+
 	router.Use(logger.New())
 
 	router.Post("/users/register", handlers.HandleRegister)
@@ -38,7 +47,7 @@ func registerRoutes(router *fiber.App) {
 	router.Delete("/users", handlers.WithJwt, handlers.HandleDeleteUser)
 
 	router.Post("/urls", handlers.WithJwt, handlers.HandleCreateShortUrl)
-	router.Get("/urls/:short_url", handlers.HandleRedirectShortUrl)
+	router.Get("/urls/:short_url", withRedirectionRateLimit, handlers.HandleRedirectShortUrl)
 	// NOTE: for now, i prefer to keep analytics only accecible form db
 }
 

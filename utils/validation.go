@@ -23,7 +23,8 @@ func init() {
 }
 
 func customUsername(fl validator.FieldLevel) bool {
-	return usernameRegex.MatchString(fl.Field().String())
+	val := fl.Field().String()
+	return val == "" || usernameRegex.MatchString(val)
 }
 
 func customNoOuterSpaces(fl validator.FieldLevel) bool {

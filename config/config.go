@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -19,8 +20,13 @@ var (
 	PgName     = getEnvString("PgName", "url_shortener")
 	PgSSL      = getEnvString("PG_SSL_MODE", "disable")
 
-	JwtTokenExpirationDays    = getEnvInt("JWT_TOKEN_EXPIRATION_DAYS", 7)
-	RandomUrlCollisionRetries = getEnvInt("RANDOM_URL_COLLISION_RETRIES", 5)
+	CacheTTL   = 10 * time.Minute
+	ValkeyAddr = getEnvString("VALKEY_ADDR", "localhost:6379")
+
+	JwtTokenExpiration               = 7 * 24 * time.Hour // 7 days
+	RandomUrlCollisionRetries        = 5
+	RedirectionRateLimitMaxPerWindow = 20
+	RedirectionRateLimitWindow       = 1 * time.Minute
 )
 
 func getEnvInt(key string, defaultValue ...int) int {

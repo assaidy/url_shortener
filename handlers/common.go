@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+
 	"github.com/assaidy/url_shortener/services"
 	"github.com/gofiber/fiber/v2"
 )
@@ -9,23 +11,22 @@ const (
 	AuthedUsername = "middleware.jwt.AuthedUsername"
 )
 
-func fromServiceError(serviceErr error) error {
-	if serviceErr == nil {
+func fromServiceError(err error) error {
+	if err == nil {
 		panic("function should not be called on nil errors")
 	}
 
-	status := fiber.StatusInternalServerError
-
-	switch serviceErr {
-	case services.ConflictErr:
-		status = fiber.StatusConflict
-	case services.NotFoundErr:
-		status = fiber.StatusNotFound
-	case services.UnauthorizedErr:
-		status = fiber.StatusUnauthorized
-	case services.ValidationErr:
-		status = fiber.StatusBadRequest
+	is := func(serviceErr error) bool {
+		return errors.Is(err, serviceErr) 
 	}
 
-	return fiber.NewError(status, serviceErr.Error())
+	status := fiber.StatusInternalServerError
+	switch {
+	case is(services.ConflictErr):     status = fiber.StatusConflict
+	case is(services.NotFoundErr):     status = fiber.StatusNotFound
+	case is(services.UnauthorizedErr): status = fiber.StatusUnauthorized
+	case is(services.ValidationErr):   status = fiber.StatusBadRequest
+	}
+
+	return fiber.NewError(status, err.Error())
 }
