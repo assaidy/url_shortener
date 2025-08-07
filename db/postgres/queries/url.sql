@@ -19,5 +19,12 @@ set
 returning length;
 
 -- name: InsertUrlVisits :exec
+with visits_data as (
+    select jsonb_array_elements(@json_visits::jsonb) as v
+)
 insert into url_visits (short_url, visitor_ip, visited_at) 
-values ($1, $2, $3);
+select 
+    v ->> 'shortUrl',
+    v ->> 'visitorIp',
+    (v ->> 'visitedAt')::timestamp
+from visits_data;

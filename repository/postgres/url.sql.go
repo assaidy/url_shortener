@@ -7,7 +7,7 @@ package postgres_repo
 
 import (
 	"context"
-	"time"
+	"encoding/json"
 )
 
 const checkShortUrl = `-- name: CheckShortUrl :one
@@ -75,17 +75,18 @@ func (q *Queries) InsertShortUrl(ctx context.Context, arg InsertShortUrlParams) 
 }
 
 const insertUrlVisits = `-- name: InsertUrlVisits :exec
+with visits_data as (
+    select jsonb_array_elements($1::jsonb) as v
+)
 insert into url_visits (short_url, visitor_ip, visited_at) 
-values ($1, $2, $3)
+select 
+    v ->> 'shortUrl',
+    v ->> 'visitorIp',
+    (v ->> 'visitedAt')::timestamp
+from visits_data
 `
 
-type InsertUrlVisitsParams struct {
-	ShortUrl  string
-	VisitorIp string
-	VisitedAt time.Time
-}
-
-func (q *Queries) InsertUrlVisits(ctx context.Context, arg InsertUrlVisitsParams) error {
-	_, err := q.exec(ctx, q.insertUrlVisitsStmt, insertUrlVisits, arg.ShortUrl, arg.VisitorIp, arg.VisitedAt)
+func (q *Queries) InsertUrlVisits(ctx context.Context, jsonVisits json.RawMessage) error {
+	_, err := q.exec(ctx, q.insertUrlVisitsStmt, insertUrlVisits, jsonVisits)
 	return err
 }

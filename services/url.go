@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -48,9 +49,9 @@ func (me *UrlService) Stop() {
 }
 
 type UrlVisit struct {
-	ShorUrl   string
-	VisitorIp string
-	VisitedAt time.Time
+	ShorUrl   string    `json:"shortUrl"`
+	VisitorIp string    `json:"visitorIp"`
+	VisitedAt time.Time `json:"visitedAt"`
 }
 
 func (me *UrlService) startUrlVisitWorker() {
@@ -76,17 +77,18 @@ func (me *UrlService) startUrlVisitWorker() {
 
 func (me *UrlService) flushUrlVisitBuffer(buff []UrlVisit) {
 	if len(buff) > 0 {
-		for _, it := range buff {
-			// TODO: this is terrible. use bulk insert
-			if err := me.queries.InsertUrlVisits(context.Background(), postgres_repo.InsertUrlVisitsParams{
-				ShortUrl:  it.ShorUrl,
-				VisitorIp: it.VisitorIp,
-				VisitedAt: it.VisitedAt,
-			}); err != nil {
-				slog.Error("error inserting url visits", "err", err)
-			}
+		rawJson, err := json.Marshal(buff)
+		if err != nil {
+			slog.Error("failed to flush visit buffer due to json marshal error ", "err", err)
+			return
 		}
-		slog.Info("url visits stored successfully" , "PID", os.Getpid())
+
+		if err := me.queries.InsertUrlVisits(context.Background(), rawJson); err != nil {
+			slog.Error("failed to flush visit buffer due to insert error", "err", err)
+			return
+		}
+
+		slog.Info("url visits stored successfully", "PID", os.Getpid())
 	}
 }
 
