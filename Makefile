@@ -1,21 +1,19 @@
 include .env
 
-GOOSE_DRIVER=postgres
-GOOSE_DBSTRING=postgresql://$(PG_USER):$(PG_PASSWORD)@$(PG_HOST):$(PG_PORT)/$(PG_NAME)?sslmode=$(PG_SSLMODE)
-GOOSE_MIGRATION_DIR=./db/postgres/migrations/
-GOOSE_ENV=GOOSE_DRIVER="$(GOOSE_DRIVER)" GOOSE_DBSTRING="$(GOOSE_DBSTRING)" GOOSE_MIGRATION_DIR="$(GOOSE_MIGRATION_DIR)"
+DB_STRING=host=$(PG_HOST) port=$(PG_PORT) user=$(PG_USER) password=$(PG_PASSWORD) dbname=$(PG_NAME) sslmode=$(PG_SSL_MODE)
+GOOSE_ENV=GOOSE_DRIVER="postgres" GOOSE_DBSTRING="$(DB_STRING)" GOOSE_MIGRATION_DIR="./db/postgres/migrations/"
 
 all: build
 
 run: build
-	@./app
+	@./bin/app
 
 build:
 	@go mod tidy
-	@go build -o ./app ./cmd/main.go
+	@go build -o ./bin/app ./cmd/main.go
 
 clean:
-	@rm ./app
+	@rm -rf ./bin/
 
 test:
 	@go test -v ./...
