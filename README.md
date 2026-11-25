@@ -89,7 +89,7 @@ The API listens on `:3000`. Local development defaults live in the committed `.e
 - **Cache, Queue & Locks:** Redis 8 (go-redis) with distributed locking
 - **Authentication:** bcrypt, session cookies, and CSRF tokens
 - **Validation:** ozzo-validation
-- **Background Jobs:** <github.com/assaidy/workers>
+- **Background Jobs:** <https://github.com/assaidy/workers>
 - **API Documentation:** OpenAPI / Swagger UI
 - **Testing:** testify and testcontainers
 - **Tooling:** Make, Docker Compose, sqlc, and goose
