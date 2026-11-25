@@ -1,0 +1,40 @@
+package events
+
+import (
+	"context"
+	"encoding/json/v2"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+)
+
+func queueName(event string) string {
+	return "queue:" + event
+}
+
+func Enqueu(ctx context.Context, rdb *redis.Client, event string, payload any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal %q payload: %w", event, err)
+	}
+	if err := rdb.LPush(ctx, queueName(event), body).Err(); err != nil {
+		return fmt.Errorf("failed to push to %q queue: %w", event, err)
+	}
+	return nil
+}
+
+func Dequeue(ctx context.Context, rdb *redis.Client, event string, out any) (bool, error) {
+	result, err := rdb.BRPop(ctx, 5*time.Second, queueName(event)).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) || ctx.Err() != nil {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to pop from %q queue: %w", event, err)
+	}
+	if err := json.Unmarshal([]byte(result[1]), out); err != nil {
+		return false, fmt.Errorf("failed to unmarshal %q event payload: %w", event, err)
+	}
+	return true, nil
+}

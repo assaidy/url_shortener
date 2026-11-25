@@ -1,1 +1,6 @@
-.env
+bin/
+
+# sqlc generated code
+**/queries/
+
+plan.md

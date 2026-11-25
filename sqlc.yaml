@@ -1,0 +1,42 @@
+version: "2"
+
+sql:
+  - engine: "postgresql"
+    schema: "./internals/services/auth/db/migrations/"
+    queries: "./internals/services/auth/db/queries.sql"
+    gen:
+      go: &go-base
+        out: "./internals/services/auth/queries/"
+        package: "queries"
+        emit_prepared_queries: true
+        emit_empty_slices: true
+        initialisms: []
+        overrides:
+          - db_type: "uuid"
+            go_type: "uuid.UUID"
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              type: "uuid.UUID"
+              pointer: true
+          # - db_type: "timestamptz"
+          #   nullable: true
+          #   go_type:
+          #     type: "time.Time"
+          #     pointer: true
+
+  - engine: "postgresql"
+    schema: "./internals/services/shortening/db/migrations/"
+    queries: "./internals/services/shortening/db/queries.sql"
+    gen:
+      go:
+        <<: *go-base
+        out: "./internals/services/shortening/queries/"
+
+  - engine: "postgresql"
+    schema: "./internals/services/redirection/db/migrations/"
+    queries: "./internals/services/redirection/db/queries.sql"
+    gen:
+      go:
+        <<: *go-base
+        out: "./internals/services/redirection/queries/"
