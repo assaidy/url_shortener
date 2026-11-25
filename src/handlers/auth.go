@@ -11,8 +11,8 @@ import (
 	"uuid"
 
 	"github.com/assaidy/moon"
-	auth_service "github.com/assaidy/url_shortener/internals/services/auth"
-	redis_service "github.com/assaidy/url_shortener/internals/services/redis"
+	auth_service "github.com/assaidy/url_shortener/src/services/auth"
+	redis_service "github.com/assaidy/url_shortener/src/services/redis"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	redislock "github.com/jefferyjob/go-redislock"
 	redislock_adapter "github.com/jefferyjob/go-redislock/adapter/go-redis/V9"

@@ -6,7 +6,7 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/assaidy/url_shortener/internals/utils"
+	"github.com/assaidy/url_shortener/src/utils"
 	"github.com/stretchr/testify/require"
 )
 

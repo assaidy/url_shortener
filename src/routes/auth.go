@@ -2,8 +2,8 @@ package routes
 
 import (
 	"github.com/assaidy/moon"
-	"github.com/assaidy/url_shortener/internals/handlers"
-	"github.com/assaidy/url_shortener/internals/specs"
+	"github.com/assaidy/url_shortener/src/handlers"
+	"github.com/assaidy/url_shortener/src/specs"
 )
 
 func mapAuth(app *moon.App) {

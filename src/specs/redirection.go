@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/assaidy/moon"
-	"github.com/assaidy/url_shortener/internals/handlers"
+	"github.com/assaidy/url_shortener/src/handlers"
 )
 
 var (

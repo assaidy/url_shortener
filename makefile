@@ -28,7 +28,7 @@ _validate-goose-name:
 		exit 1;                                                     \
 	fi
 
-GOOSE_ENV = GOOSE_DRIVER="postgres" GOOSE_DBSTRING="$(POSTGRES_URL)" GOOSE_MIGRATION_DIR="./internals/services/$(service)/db/migrations/"
+GOOSE_ENV = GOOSE_DRIVER="postgres" GOOSE_DBSTRING="$(POSTGRES_URL)" GOOSE_MIGRATION_DIR="./src/services/$(service)/db/migrations/"
 GOOSE_CMD = $(GOOSE_ENV) go tool goose -table="goose_db_version_$(service)"
 goose-up: _validate-goose-service
 	@$(GOOSE_CMD) up
@@ -39,16 +39,16 @@ goose-reset: _validate-goose-service
 goose-new: _validate-goose-service _validate-goose-name
 	@$(GOOSE_CMD) create $(name) sql
 
-SERVICES = $(shell ls -d ./internals/services/*/ | xargs -n1 basename)
+SERVICES = $(shell ls -d ./src/services/*/ | xargs -n1 basename)
 goose-up-all:
 	@for service in $(SERVICES); do                                      \
-		[ -d "./internals/services/$$service/db/migrations" ] || continue; \
+		[ -d "./src/services/$$service/db/migrations" ] || continue; \
 		echo "==> goose up: $$service";                                    \
 		make goose-up service=$$service;                                   \
 	done
 goose-reset-all:
 	@for service in $(SERVICES); do                                      \
-		[ -d "./internals/services/$$service/db/migrations" ] || continue; \
+		[ -d "./src/services/$$service/db/migrations" ] || continue; \
 		echo "==> goose reset: $$service";                                 \
 		make goose-reset service=$$service;                                \
 	done

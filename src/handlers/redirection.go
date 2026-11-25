@@ -9,9 +9,9 @@ import (
 
 	"github.com/assaidy/moon"
 	"github.com/assaidy/moon/handlers/pagination"
-	redirection_service "github.com/assaidy/url_shortener/internals/services/redirection"
-	shortening_service "github.com/assaidy/url_shortener/internals/services/shortening"
-	"github.com/assaidy/url_shortener/internals/utils"
+	redirection_service "github.com/assaidy/url_shortener/src/services/redirection"
+	shortening_service "github.com/assaidy/url_shortener/src/services/shortening"
+	"github.com/assaidy/url_shortener/src/utils"
 )
 
 func Redirect(ctx *moon.Context) error {

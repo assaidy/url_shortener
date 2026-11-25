@@ -13,11 +13,11 @@ import (
 	"uuid"
 
 	"github.com/assaidy/moon"
-	"github.com/assaidy/url_shortener/internals/events"
-	postgres_service "github.com/assaidy/url_shortener/internals/services/postgres"
-	"github.com/assaidy/url_shortener/internals/services/redirection/queries"
-	redis_service "github.com/assaidy/url_shortener/internals/services/redis"
-	"github.com/assaidy/url_shortener/internals/utils"
+	"github.com/assaidy/url_shortener/src/events"
+	postgres_service "github.com/assaidy/url_shortener/src/services/postgres"
+	"github.com/assaidy/url_shortener/src/services/redirection/queries"
+	redis_service "github.com/assaidy/url_shortener/src/services/redis"
+	"github.com/assaidy/url_shortener/src/utils"
 	"github.com/assaidy/workers"
 	"github.com/redis/go-redis/v9"
 )

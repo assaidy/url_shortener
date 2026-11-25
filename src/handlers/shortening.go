@@ -9,7 +9,7 @@ import (
 
 	"github.com/assaidy/moon"
 	"github.com/assaidy/moon/handlers/pagination"
-	shortening_service "github.com/assaidy/url_shortener/internals/services/shortening"
+	shortening_service "github.com/assaidy/url_shortener/src/services/shortening"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/go-ozzo/ozzo-validation/v4/is"
 )

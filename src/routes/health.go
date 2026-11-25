@@ -3,7 +3,7 @@ package routes
 import (
 	"github.com/assaidy/moon"
 	"github.com/assaidy/moon/handlers/health_check"
-	"github.com/assaidy/url_shortener/internals/specs"
+	"github.com/assaidy/url_shortener/src/specs"
 )
 
 func mapHealth(app *moon.App) {

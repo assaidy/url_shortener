@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/assaidy/moon"
-	"github.com/assaidy/url_shortener/internals/routes"
-	auth_service "github.com/assaidy/url_shortener/internals/services/auth"
-	postgres_service "github.com/assaidy/url_shortener/internals/services/postgres"
-	redirection_service "github.com/assaidy/url_shortener/internals/services/redirection"
-	redis_service "github.com/assaidy/url_shortener/internals/services/redis"
-	shortening_service "github.com/assaidy/url_shortener/internals/services/shortening"
+	"github.com/assaidy/url_shortener/src/routes"
+	auth_service "github.com/assaidy/url_shortener/src/services/auth"
+	postgres_service "github.com/assaidy/url_shortener/src/services/postgres"
+	redirection_service "github.com/assaidy/url_shortener/src/services/redirection"
+	redis_service "github.com/assaidy/url_shortener/src/services/redis"
+	shortening_service "github.com/assaidy/url_shortener/src/services/shortening"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 	"github.com/redis/go-redis/v9"
@@ -161,7 +161,7 @@ func migrateTemplate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	dirs, err := filepath.Glob(filepath.Join(root, "internals", "services", "*", "db", "migrations"))
+	dirs, err := filepath.Glob(filepath.Join(root, "src", "services", "*", "db", "migrations"))
 	if err != nil {
 		return fmt.Errorf("failed to find migration directories: %w", err)
 	}

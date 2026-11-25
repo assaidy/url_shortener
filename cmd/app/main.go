@@ -5,12 +5,12 @@ import (
 	"os"
 
 	"github.com/assaidy/moon"
-	"github.com/assaidy/url_shortener/internals/routes"
-	auth_service "github.com/assaidy/url_shortener/internals/services/auth"
-	postgres_service "github.com/assaidy/url_shortener/internals/services/postgres"
-	redirection_service "github.com/assaidy/url_shortener/internals/services/redirection"
-	redis_service "github.com/assaidy/url_shortener/internals/services/redis"
-	shortening_service "github.com/assaidy/url_shortener/internals/services/shortening"
+	"github.com/assaidy/url_shortener/src/routes"
+	auth_service "github.com/assaidy/url_shortener/src/services/auth"
+	postgres_service "github.com/assaidy/url_shortener/src/services/postgres"
+	redirection_service "github.com/assaidy/url_shortener/src/services/redirection"
+	redis_service "github.com/assaidy/url_shortener/src/services/redis"
+	shortening_service "github.com/assaidy/url_shortener/src/services/shortening"
 	"github.com/charmbracelet/log"
 	_ "github.com/joho/godotenv/autoload"
 )
