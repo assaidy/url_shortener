@@ -28,10 +28,6 @@ func main() {
 
 	app.AddDependency(logger)
 
-	// TODO: use service interfaces instead of pointers.
-	// the interface shouldn't include [moon.Service] impl methods
-	// in order to hide them from users of the service.
-	// still, assert [moon.Service] on the service impl internally.
 	app.AddService(postgres_service.New(moon.MustGetEnv("POSTGRES_URL")))
 	app.AddService(redis_service.New(moon.MustGetEnv("REDIS_ADDRESS")))
 	app.AddService(auth_service.New())

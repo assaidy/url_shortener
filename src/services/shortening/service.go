@@ -1,3 +1,5 @@
+// Package shortening provides short url creation, management, and lookup
+// backed by PostgreSQL.
 package shortening
 
 import (
@@ -12,8 +14,6 @@ import (
 
 	"github.com/assaidy/moon"
 	"github.com/assaidy/url_shortener/src/events"
-	postgres_service "github.com/assaidy/url_shortener/src/services/postgres"
-	redis_service "github.com/assaidy/url_shortener/src/services/redis"
 	"github.com/assaidy/url_shortener/src/services/shortening/queries"
 	"github.com/assaidy/url_shortener/src/utils"
 	"github.com/assaidy/workers"
@@ -23,23 +23,80 @@ import (
 
 const urlClickEventConsumers = 4
 
-var _ moon.Service = (*Service)(nil)
+// Service manages short urls: creating, listing, updating, deleting, and
+// resolving them by alias.
+type Service interface {
+	// CreateUrl creates a short url owned by userId and returns it. The alias
+	// is generated randomly and its length is grown as needed until it is
+	// unique. A zero expiresAt means the url never expires.
+	//
+	// It returns no sentinel errors.
+	CreateUrl(ctx context.Context, userId uuid.UUID, title, url string, expiresAt time.Time) (*Url, error)
 
-type Service struct {
+	// GetUserUrls returns a page of the non-deleted urls owned by userId,
+	// filtered by search and ordered by sort. The last* arguments are the
+	// cursor: when lastId is the nil UUID the first page is returned, and
+	// limit caps the page size.
+	//
+	// Errors:
+	//   - [ErrInvalidSort]: sort is not a known [UserUrlsSort] value.
+	GetUserUrls(
+		ctx context.Context,
+		userId uuid.UUID,
+		search string,
+		sort UserUrlsSort,
+		lastTitle, lastUrl, lastAlias string, lastCreatedAt time.Time, lastId uuid.UUID,
+		limit int,
+	) ([]Url, error)
+
+	// GetUserUrl returns the url with the given ID owned by userId.
+	//
+	// Errors:
+	//   - [ErrUrlNotFound]: the user owns no such url.
+	GetUserUrl(ctx context.Context, userId, urlId uuid.UUID) (*Url, error)
+
+	// UpdateUserUrl updates the title, expiration, and active state of the url
+	// with the given ID owned by userId, and returns the updated url.
+	//
+	// Errors:
+	//   - [ErrUrlNotFound]: the user owns no such url.
+	UpdateUserUrl(ctx context.Context, userId, urlId uuid.UUID, title string, expiresAt time.Time, isActive bool) (*Url, error)
+
+	// DeleteUserUrl soft-deletes the url with the given ID owned by userId.
+	//
+	// Errors:
+	//   - [ErrUrlNotFound]: the user owns no such non-deleted url.
+	DeleteUserUrl(ctx context.Context, userId, urlId uuid.UUID) error
+
+	// GetUrlByAlias returns the non-deleted url with the given alias.
+	//
+	// Errors:
+	//   - [ErrUrlNotFound]: no such url exists.
+	GetUrlByAlias(ctx context.Context, alias string) (*Url, error)
+}
+
+var (
+	_ moon.Service = (*impl)(nil)
+	_ Service      = (*impl)(nil)
+)
+
+// impl is the PostgreSQL and Redis backed implementation of [Service].
+type impl struct {
 	db            *sql.DB
 	queries       *queries.Queries
 	rdb           *redis.Client
 	workerManager *workers.WorkerManager
 }
 
-// New returns a shortening service backed by db.
-func New() moon.ServiceConstructor[*Service] {
-	return func(i moon.Injected) *Service {
-		logger := i.GetDependency[*slog.Logger]()
-		db := i.GetService[*postgres_service.Service]().GetDb()
-		rdb := i.GetService[*redis_service.Service]().GetClient()
+// New returns a Service backed by the database and Redis client found in the
+// dependency container.
+func New() moon.ServiceConstructor {
+	return func(deps *moon.DependencyContainer) moon.Service {
+		logger := deps.Get[*slog.Logger]()
+		db := deps.Get[*sql.DB]()
+		rdb := deps.Get[*redis.Client]()
 
-		service := &Service{
+		service := &impl{
 			db:      db,
 			queries: queries.New(db),
 			rdb:     rdb,
@@ -74,27 +131,30 @@ func New() moon.ServiceConstructor[*Service] {
 }
 
 // Name implements [moon.Service].
-func (s *Service) Name() string {
+func (me *impl) Name() string {
 	return "urls"
 }
 
 // Start implements [moon.Service].
-func (s *Service) Start() error {
-	s.workerManager.Start()
+func (me *impl) Start(deps *moon.DependencyContainer) error {
+	me.workerManager.Start()
+	deps.Set(Service(me))
 	return nil
 }
 
 // Stop implements [moon.Service].
-func (s *Service) Stop() error {
-	s.workerManager.Stop()
+func (me *impl) Stop(deps *moon.DependencyContainer) error {
+	deps.Delete[Service]()
+	me.workerManager.Stop()
 	return nil
 }
 
 // IsReady implements [moon.Service].
-func (s *Service) IsReady() bool {
+func (me *impl) IsReady() bool {
 	return true
 }
 
+// Url is a short url and its metadata.
 type Url struct {
 	Id        uuid.UUID
 	UserId    uuid.UUID
@@ -107,9 +167,7 @@ type Url struct {
 	Clicks    int64
 }
 
-// CreateUrl creates a short url owned by userId and returns it. The alias is
-// generated and grown as needed until it is unique.
-func (me *Service) CreateUrl(ctx context.Context, userId uuid.UUID, title, url string, expiresAt time.Time) (*Url, error) {
+func (me *impl) CreateUrl(ctx context.Context, userId uuid.UUID, title, url string, expiresAt time.Time) (*Url, error) {
 	length, err := me.queries.GetAliasLength(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get alias length: %w", err)
@@ -151,12 +209,13 @@ func (me *Service) CreateUrl(ctx context.Context, userId uuid.UUID, title, url s
 			}
 		}
 
+		// TODO: cap the alias length so a bug that keeps inserts from succeeding
+		// can't make this loop grow the alias length forever.
 		length, err = me.queries.IncrementAliasLength(ctx, length)
 		if err != nil {
 			return nil, fmt.Errorf("failed to increment alias length: %w", err)
 		}
 	}
-
 }
 
 func generateRandomLetters(length int) string {
@@ -168,6 +227,7 @@ func generateRandomLetters(length int) string {
 	return string(buffer)
 }
 
+// UserUrlsSort is a sort order for [Service.GetUserUrls].
 type UserUrlsSort string
 
 const (
@@ -192,9 +252,7 @@ func (me UserUrlsSort) isValid() bool {
 	return false
 }
 
-// GetUserUrls returns the urls owned by userId ordered newest first. When
-// lastId is the nil UUID the first page is returned; limit caps the page size.
-func (me *Service) GetUserUrls(
+func (me *impl) GetUserUrls(
 	ctx context.Context,
 	userId uuid.UUID,
 	search string,
@@ -230,9 +288,7 @@ func (me *Service) GetUserUrls(
 	return urls, nil
 }
 
-// GetUserUrl returns the url with the given ID owned by userId. It returns
-// ErrUrlNotFound when the user owns no such url.
-func (me *Service) GetUserUrl(ctx context.Context, userId, urlId uuid.UUID) (*Url, error) {
+func (me *impl) GetUserUrl(ctx context.Context, userId, urlId uuid.UUID) (*Url, error) {
 	row, err := me.queries.GetUserUrlById(ctx, queries.GetUserUrlByIdParams{
 		Id:     urlId,
 		UserId: userId,
@@ -247,9 +303,7 @@ func (me *Service) GetUserUrl(ctx context.Context, userId, urlId uuid.UUID) (*Ur
 	return new(toUrl(row)), nil
 }
 
-// UpdateUserUrl applies update to the url with the given ID owned by userId. It
-// returns ErrUrlNotFound when the user owns no such url.
-func (me *Service) UpdateUserUrl(ctx context.Context, userId, urlId uuid.UUID, title string, expiresAt time.Time, isActive bool) (*Url, error) {
+func (me *impl) UpdateUserUrl(ctx context.Context, userId, urlId uuid.UUID, title string, expiresAt time.Time, isActive bool) (*Url, error) {
 	row, err := me.queries.UpdateUserUrl(ctx, queries.UpdateUserUrlParams{
 		Id:        urlId,
 		UserId:    userId,
@@ -267,9 +321,7 @@ func (me *Service) UpdateUserUrl(ctx context.Context, userId, urlId uuid.UUID, t
 	return new(toUrl(row)), nil
 }
 
-// DeleteUserUrl soft-deletes the url with the given ID owned by userId. It
-// returns ErrUrlNotFound when the user owns no such non-deleted url.
-func (me *Service) DeleteUserUrl(ctx context.Context, userId, urlId uuid.UUID) error {
+func (me *impl) DeleteUserUrl(ctx context.Context, userId, urlId uuid.UUID) error {
 	if n, err := me.queries.SoftDeleteUserUrl(ctx, queries.SoftDeleteUserUrlParams{
 		Id:     urlId,
 		UserId: userId,
@@ -282,7 +334,19 @@ func (me *Service) DeleteUserUrl(ctx context.Context, userId, urlId uuid.UUID) e
 	return nil
 }
 
-func (me *Service) userDeletedEventConsumerJob(ctx context.Context) error {
+func (me *impl) GetUrlByAlias(ctx context.Context, alias string) (*Url, error) {
+	row, err := me.queries.GetUrlByAlias(ctx, alias)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUrlNotFound
+		}
+		return nil, fmt.Errorf("failed to get url by alias: %w", err)
+	}
+
+	return new(toUrl(row)), nil
+}
+
+func (me *impl) userDeletedEventConsumerJob(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -302,7 +366,7 @@ func (me *Service) userDeletedEventConsumerJob(ctx context.Context) error {
 	}
 }
 
-func (me *Service) urlClickedEventConsumerJob(ctx context.Context) error {
+func (me *impl) urlClickedEventConsumerJob(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -337,18 +401,4 @@ func toUrl(r queries.ShorteningUrl) Url {
 		u.ExpiresAt = &r.ExpiresAt.Time
 	}
 	return u
-}
-
-// GetUrlByAlias returns the non-deleted url with the given alias. It returns
-// ErrUrlNotFound when no such url exists.
-func (me *Service) GetUrlByAlias(ctx context.Context, alias string) (*Url, error) {
-	row, err := me.queries.GetUrlByAlias(ctx, alias)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrUrlNotFound
-		}
-		return nil, fmt.Errorf("failed to get url by alias: %w", err)
-	}
-
-	return new(toUrl(row)), nil
 }

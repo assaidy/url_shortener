@@ -24,19 +24,19 @@ func CreateUrl(ctx *moon.Context) error {
 		return ErrInvalidJson
 	}
 
-	request.Url = strings.TrimSpace(request.Url)
 	request.Title = strings.TrimSpace(request.Title)
+	request.Url = strings.TrimSpace(request.Url)
 
 	if err := validation.ValidateStruct(&request,
 		validation.Field(&request.Url, validation.Required, is.URL),
-		validation.Field(&request.Title, validation.Length(1, 256)),
+		validation.Field(&request.Title, validation.Length(0, 256)),
 	); err != nil {
 		return ErrInvalidPayload.WithDetails(err)
 	}
 
 	session := getCurrentSession(ctx)
 
-	shorteningService := ctx.GetService[*shortening_service.Service]()
+	shorteningService := ctx.GetDependency[shortening_service.Service]()
 	url, err := shorteningService.CreateUrl(ctx, session.UserId, request.Title, request.Url, request.ExpiresAt)
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func GetOneUrl(ctx *moon.Context) error {
 
 	session := getCurrentSession(ctx)
 
-	shorteningService := ctx.GetService[*shortening_service.Service]()
+	shorteningService := ctx.GetDependency[shortening_service.Service]()
 	url, err := shorteningService.GetUserUrl(ctx, session.UserId, urlId)
 	if err != nil {
 		if errors.Is(err, shortening_service.ErrUrlNotFound) {
@@ -104,7 +104,7 @@ func EditUrl(ctx *moon.Context) error {
 
 	session := getCurrentSession(ctx)
 
-	shorteningService := ctx.GetService[*shortening_service.Service]()
+	shorteningService := ctx.GetDependency[shortening_service.Service]()
 	url, err := shorteningService.UpdateUserUrl(ctx, session.UserId, urlId, request.Title, request.ExpiresAt, request.IsActive)
 	if err != nil {
 		if errors.Is(err, shortening_service.ErrUrlNotFound) {
@@ -124,7 +124,7 @@ func DeleteUrl(ctx *moon.Context) error {
 
 	session := getCurrentSession(ctx)
 
-	shorteningService := ctx.GetService[*shortening_service.Service]()
+	shorteningService := ctx.GetDependency[shortening_service.Service]()
 	if err := shorteningService.DeleteUserUrl(ctx, session.UserId, urlId); err != nil {
 		if errors.Is(err, shortening_service.ErrUrlNotFound) {
 			return ErrUrlNotFound
@@ -154,10 +154,10 @@ func GetUrls(ctx *moon.Context) error {
 		}
 	}
 
-	// Ensure the cursor is either empty (first request) or fully populated (app-encoded cursor).
+	// Ensure the cursor is either empty (first request) or fully populated
+	// (app-encoded cursor). LastTitle is excluded because titles may be empty.
 	if requestCursor != (cursor{}) &&
-		(requestCursor.LastTitle == "" ||
-			requestCursor.LastUrl == "" ||
+		(requestCursor.LastUrl == "" ||
 			requestCursor.LastAlias == "" ||
 			requestCursor.LastCreatedAt.IsZero() ||
 			requestCursor.LastId == uuid.Nil()) {
@@ -169,7 +169,7 @@ func GetUrls(ctx *moon.Context) error {
 		return moon.ErrBadRequest.WithDetails("only one sort key is allowed")
 	}
 
-	shorteningService := ctx.GetService[*shortening_service.Service]()
+	shorteningService := ctx.GetDependency[shortening_service.Service]()
 	urls, err := shorteningService.GetUserUrls(
 		ctx,
 		getCurrentSession(ctx).UserId,

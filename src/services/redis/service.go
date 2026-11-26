@@ -8,9 +8,9 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var _ moon.Service = (*Service)(nil)
+var _ moon.Service = (*impl)(nil)
 
-type Service struct {
+type impl struct {
 	address string
 	db      int
 	client  *redis.Client
@@ -18,27 +18,23 @@ type Service struct {
 
 // New returns a Service for address. An optional db selects the Redis database,
 // defaulting to 0.
-func New(address string, db ...int) moon.ServiceConstructor[*Service] {
+func New(address string, db ...int) moon.ServiceConstructor {
 	index := 0
 	if len(db) > 0 {
 		index = db[0]
 	}
-	return func(i moon.Injected) *Service {
-		return &Service{address: address, db: index}
+	return func(dependencies *moon.DependencyContainer) moon.Service {
+		return &impl{address: address, db: index}
 	}
 }
 
-func (me *Service) GetClient() *redis.Client {
-	return me.client
-}
-
 // Name implements [moon.Service].
-func (me *Service) Name() string {
+func (me *impl) Name() string {
 	return "redis"
 }
 
 // Start implements [moon.Service].
-func (me *Service) Start() error {
+func (me *impl) Start(deps *moon.DependencyContainer) error {
 	client := redis.NewClient(&redis.Options{
 		Addr: me.address,
 		DB:   me.db,
@@ -51,16 +47,20 @@ func (me *Service) Start() error {
 	}
 
 	me.client = client
+
+	deps.Set(client)
+
 	return nil
 }
 
 // Stop implements [moon.Service].
-func (me *Service) Stop() error {
+func (me *impl) Stop(deps *moon.DependencyContainer) error {
+	deps.Delete[*redis.Client]()
 	return me.client.Close()
 }
 
 // IsReady implements [moon.Service].
-func (me *Service) IsReady() bool {
+func (me *impl) IsReady() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return me.client.Ping(ctx).Err() == nil

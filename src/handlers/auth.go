@@ -12,10 +12,10 @@ import (
 
 	"github.com/assaidy/moon"
 	auth_service "github.com/assaidy/url_shortener/src/services/auth"
-	redis_service "github.com/assaidy/url_shortener/src/services/redis"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	redislock "github.com/jefferyjob/go-redislock"
 	redislock_adapter "github.com/jefferyjob/go-redislock/adapter/go-redis/V9"
+	"github.com/redis/go-redis/v9"
 )
 
 // FlagDeleteAccount marks the route that deletes the current account.
@@ -54,7 +54,7 @@ func Register(ctx *moon.Context) error {
 		return ErrInvalidPayload.WithDetails(err)
 	}
 
-	authService := ctx.GetService[*auth_service.Service]()
+	authService := ctx.GetDependency[auth_service.Service]()
 
 	if err := authService.Register(ctx, request.Name, request.Username, request.Password); err != nil {
 		if errors.Is(err, auth_service.ErrUsernameConflict) {
@@ -84,7 +84,7 @@ func Login(ctx *moon.Context) error {
 		return ErrInvalidPayload.WithDetails(err)
 	}
 
-	authService := ctx.GetService[*auth_service.Service]()
+	authService := ctx.GetDependency[auth_service.Service]()
 
 	session, err := authService.Login(ctx, request.Username, request.Password, ctx.GetHeader("User-Agent"))
 	if err != nil {
@@ -131,7 +131,7 @@ func HasSession(ctx *moon.Context) error {
 		return moon.ErrUnauthorized
 	}
 
-	authService := ctx.GetService[*auth_service.Service]()
+	authService := ctx.GetDependency[auth_service.Service]()
 
 	session, err := authService.GetSession(ctx, sessionId)
 	if err != nil {
@@ -178,7 +178,7 @@ func HasSession(ctx *moon.Context) error {
 // returned unlock.
 func rlockUser(ctx *moon.Context, userId uuid.UUID) (unlock func(context.Context) error, err error) {
 	lock := redislock.New(
-		redislock_adapter.New(ctx.GetService[*redis_service.Service]().GetClient()),
+		redislock_adapter.New(ctx.GetDependency[*redis.Client]()),
 		"users:"+userId.String(),
 		redislock.WithAutoRenew(),
 	)
@@ -193,7 +193,7 @@ func rlockUser(ctx *moon.Context, userId uuid.UUID) (unlock func(context.Context
 // deleted. The caller must defer the returned unlock.
 func wlockUser(ctx *moon.Context, userId uuid.UUID) (unlock func(context.Context) error, err error) {
 	lock := redislock.New(
-		redislock_adapter.New(ctx.GetService[*redis_service.Service]().GetClient()),
+		redislock_adapter.New(ctx.GetDependency[*redis.Client]()),
 		"users:"+userId.String(),
 		redislock.WithAutoRenew(),
 	)
@@ -229,7 +229,7 @@ func HasCsrf(ctx *moon.Context) error {
 func Logout(ctx *moon.Context) error {
 	session := getCurrentSession(ctx)
 
-	authService := ctx.GetService[*auth_service.Service]()
+	authService := ctx.GetDependency[auth_service.Service]()
 	if err := authService.DeleteSession(ctx, session.Id, session.UserId); err != nil {
 		if errors.Is(err, auth_service.ErrUserNotFound) || errors.Is(err, auth_service.ErrSessionNotFound) {
 			return moon.ErrUnauthorized
@@ -262,7 +262,7 @@ func EditUsername(ctx *moon.Context) error {
 
 	session := getCurrentSession(ctx)
 
-	authService := ctx.GetService[*auth_service.Service]()
+	authService := ctx.GetDependency[auth_service.Service]()
 
 	if err := authService.EditUsername(ctx, session.UserId, request.Username); err != nil {
 		if errors.Is(err, auth_service.ErrUsernameConflict) {
@@ -297,7 +297,7 @@ func EditPassword(ctx *moon.Context) error {
 
 	session := getCurrentSession(ctx)
 
-	authService := ctx.GetService[*auth_service.Service]()
+	authService := ctx.GetDependency[auth_service.Service]()
 
 	if err := authService.EditPassword(ctx, session.Id, session.UserId, request.OldPassword, request.NewPassword); err != nil {
 		if errors.Is(err, auth_service.ErrInvalidOldPassword) {
@@ -315,7 +315,7 @@ func EditPassword(ctx *moon.Context) error {
 func GetAccount(ctx *moon.Context) error {
 	session := getCurrentSession(ctx)
 
-	authService := ctx.GetService[*auth_service.Service]()
+	authService := ctx.GetDependency[auth_service.Service]()
 
 	account, err := authService.GetAccount(ctx, session.UserId)
 	if err != nil {
@@ -345,7 +345,7 @@ func DeleteAccount(ctx *moon.Context) error {
 	}
 	defer unlock(ctx)
 
-	authService := ctx.GetService[*auth_service.Service]()
+	authService := ctx.GetDependency[auth_service.Service]()
 
 	if err := authService.DeleteAccount(ctx, session.UserId); err != nil {
 		if errors.Is(err, auth_service.ErrUserNotFound) {

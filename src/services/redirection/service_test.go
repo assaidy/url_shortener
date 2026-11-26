@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newBufferingService builds the minimum Service needed to exercise the
-// buffering job without starting the postgres- and redis-backed workers.
-func newBufferingService() *Service {
-	return &Service{
+// newBufferingService builds the minimum impl needed to exercise the buffering
+// job without starting the postgres- and redis-backed workers.
+func newBufferingService() *impl {
+	return &impl{
 		redirectionRecords: make(chan redirectionRecord, redirectionIngressSize),
 		redirectionBatches: make(chan *[]redirectionRecord, redirectionBatchQueueSize*4),
 		redirectionPool: sync.Pool{New: func() any {
@@ -25,7 +25,7 @@ func newBufferingService() *Service {
 
 // startBufferJob runs the buffer job until the test ends. Closing the record
 // channel lets the job drain and stop without leaking its goroutine.
-func startBufferJob(t *testing.T, service *Service) {
+func startBufferJob(t *testing.T, service *impl) {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -46,7 +46,7 @@ func startBufferJob(t *testing.T, service *Service) {
 	})
 }
 
-func recordRedirection(t *testing.T, service *Service) {
+func recordRedirection(t *testing.T, service *impl) {
 	t.Helper()
 
 	require.NoError(t, service.Record(
@@ -61,7 +61,7 @@ func recordRedirection(t *testing.T, service *Service) {
 
 // receiveRedirectionBatch waits for the buffer job to hand a batch to the
 // flusher and reports when the batch was received.
-func receiveRedirectionBatch(t *testing.T, service *Service, timeout time.Duration) (*[]redirectionRecord, time.Time) {
+func receiveRedirectionBatch(t *testing.T, service *impl, timeout time.Duration) (*[]redirectionRecord, time.Time) {
 	t.Helper()
 
 	select {

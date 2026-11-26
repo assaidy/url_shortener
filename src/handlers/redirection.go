@@ -17,7 +17,7 @@ import (
 func Redirect(ctx *moon.Context) error {
 	alias := ctx.GetParam("alias")
 
-	shorteningService := ctx.GetService[*shortening_service.Service]()
+	shorteningService := ctx.GetDependency[shortening_service.Service]()
 	url, err := shorteningService.GetUrlByAlias(ctx, alias)
 	if err != nil {
 		if errors.Is(err, shortening_service.ErrUrlNotFound) {
@@ -38,7 +38,7 @@ func Redirect(ctx *moon.Context) error {
 	// this click is in flight, and we still want the redirection recorded.
 	// Redirections are analytics history that outlives the URLs they point to.
 	userAgent := ctx.GetHeader("User-Agent")
-	redirectionService := ctx.GetService[*redirection_service.Service]()
+	redirectionService := ctx.GetDependency[redirection_service.Service]()
 	if err := redirectionService.Record(
 		ctx,
 		url.Id,
@@ -157,7 +157,7 @@ func GetRedirections(ctx *moon.Context) error {
 		return moon.ErrBadRequest.WithDetails("only one sort key is allowed")
 	}
 
-	redirectionService := ctx.GetService[*redirection_service.Service]()
+	redirectionService := ctx.GetDependency[redirection_service.Service]()
 	redirections, err := redirectionService.GetUserRedirections(
 		ctx,
 		getCurrentSession(ctx).UserId,
@@ -197,7 +197,7 @@ func GetOneRedirection(ctx *moon.Context) error {
 		return ErrRedirectionNotFound
 	}
 
-	redirectionService := ctx.GetService[*redirection_service.Service]()
+	redirectionService := ctx.GetDependency[redirection_service.Service]()
 	redirection, err := redirectionService.GetRedirectionById(ctx, id, getCurrentSession(ctx).UserId)
 	if err != nil {
 		if errors.Is(err, redirection_service.ErrRedirectionNotFound) {
@@ -231,7 +231,7 @@ func GetUrlRedirections(ctx *moon.Context) error {
 	// Make sure the url belongs to the current user before exposing its
 	// redirections. The url may be deleted after this check; redirections are
 	// analytics history and remain readable in that case.
-	shorteningService := ctx.GetService[*shortening_service.Service]()
+	shorteningService := ctx.GetDependency[shortening_service.Service]()
 	if _, err := shorteningService.GetUserUrl(ctx, getCurrentSession(ctx).UserId, urlId); err != nil {
 		if errors.Is(err, shortening_service.ErrUrlNotFound) {
 			return ErrUrlNotFound
@@ -239,7 +239,7 @@ func GetUrlRedirections(ctx *moon.Context) error {
 		return err
 	}
 
-	redirectionService := ctx.GetService[*redirection_service.Service]()
+	redirectionService := ctx.GetDependency[redirection_service.Service]()
 	redirections, err := redirectionService.GetUrlRedirections(
 		ctx,
 		urlId,

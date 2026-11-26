@@ -1,4 +1,5 @@
-// Package redirection records clicks on public short links.
+// Package redirection records clicks on public short links and exposes the
+// recorded redirections.
 package redirection
 
 import (
@@ -14,9 +15,7 @@ import (
 
 	"github.com/assaidy/moon"
 	"github.com/assaidy/url_shortener/src/events"
-	postgres_service "github.com/assaidy/url_shortener/src/services/postgres"
 	"github.com/assaidy/url_shortener/src/services/redirection/queries"
-	redis_service "github.com/assaidy/url_shortener/src/services/redis"
 	"github.com/assaidy/url_shortener/src/utils"
 	"github.com/assaidy/workers"
 	"github.com/redis/go-redis/v9"
@@ -30,10 +29,67 @@ const (
 	redirectionFlushTimeout   = 10 * time.Second
 )
 
-var _ moon.Service = (*Service)(nil)
+// Service records redirections (clicks on short links) and lets callers read
+// them back.
+type Service interface {
+	// Record buffers a click on the url urlId, owned by userId, for
+	// asynchronous persistence. Records are written in batches by a background
+	// flusher, so a nil error only means the click was accepted for recording;
+	// it does not mean it has been written to the database.
+	//
+	// It returns no sentinel errors. If ctx ends while the buffer is full, the
+	// wrapped context error is returned.
+	Record(ctx context.Context, urlId, userId uuid.UUID, ip, platform, os string) error
 
-// Service stores redirection records.
-type Service struct {
+	// GetUserRedirections returns a page of the redirections of all urls owned
+	// by userId, ordered by sort. The last* arguments are the cursor: when
+	// lastRedirectionId is the nil UUID the first page is returned, and limit
+	// caps the page size.
+	//
+	// Errors:
+	//   - [ErrInvalidSort]: sort is not a known [RedirectionsSort] value.
+	GetUserRedirections(
+		ctx context.Context,
+		userId uuid.UUID,
+		sort RedirectionsSort,
+		lastCreatedAt time.Time, lastOs, lastPlatform string, lastRedirectionId uuid.UUID,
+		limit int,
+	) ([]Redirection, error)
+
+	// GetRedirectionById returns the redirection with the given ID that
+	// belongs to userId.
+	//
+	// Errors:
+	//   - [ErrRedirectionNotFound]: the user has no redirection with this ID.
+	GetRedirectionById(ctx context.Context, redirectionId, userId uuid.UUID) (*Redirection, error)
+
+	// GetUrlRedirections returns a page of the redirections of the url urlId,
+	// ordered by sort. The last* arguments are the cursor: when
+	// lastRedirectionId is the nil UUID the first page is returned, and limit
+	// caps the page size.
+	//
+	// Redirections are a historical record and are kept after their url is
+	// deleted, so this does not check that the url exists or who owns it.
+	// Callers must authorize access to urlId first.
+	//
+	// Errors:
+	//   - [ErrInvalidSort]: sort is not a known [RedirectionsSort] value.
+	GetUrlRedirections(
+		ctx context.Context,
+		urlId uuid.UUID,
+		sort RedirectionsSort,
+		lastCreatedAt time.Time, lastOs, lastPlatform string, lastRedirectionId uuid.UUID,
+		limit int,
+	) ([]Redirection, error)
+}
+
+var (
+	_ Service      = (*impl)(nil)
+	_ moon.Service = (*impl)(nil)
+)
+
+// impl is the PostgreSQL and Redis backed implementation of [Service].
+type impl struct {
 	db                      *sql.DB
 	queries                 *queries.Queries
 	rdb                     *redis.Client
@@ -46,14 +102,15 @@ type Service struct {
 	lastRedirectionFlush    time.Time
 }
 
-// New returns a Service backed by db.
-func New() moon.ServiceConstructor[*Service] {
-	return func(i moon.Injected) *Service {
-		logger := i.GetDependency[*slog.Logger]()
-		db := i.GetService[*postgres_service.Service]().GetDb()
-		rdb := i.GetService[*redis_service.Service]().GetClient()
+// New returns a Service backed by the database and Redis client found in the
+// dependency container.
+func New() moon.ServiceConstructor {
+	return func(deps *moon.DependencyContainer) moon.Service {
+		logger := deps.Get[*slog.Logger]()
+		db := deps.Get[*sql.DB]()
+		rdb := deps.Get[*redis.Client]()
 
-		service := &Service{
+		service := &impl{
 			db:                 db,
 			queries:            queries.New(db),
 			rdb:                rdb,
@@ -81,25 +138,27 @@ func New() moon.ServiceConstructor[*Service] {
 }
 
 // Name implements [moon.Service].
-func (me *Service) Name() string {
+func (me *impl) Name() string {
 	return "redirection"
 }
 
 // Start implements [moon.Service].
-func (me *Service) Start() error {
+func (me *impl) Start(deps *moon.DependencyContainer) error {
 	me.workerManager.Start()
+	deps.Set(Service(me))
 	return nil
 }
 
 // Stop implements [moon.Service].
-func (me *Service) Stop() error {
+func (me *impl) Stop(deps *moon.DependencyContainer) error {
+	deps.Delete[Service]()
 	close(me.redirectionRecords)
 	me.workerManager.Stop()
 	return nil
 }
 
 // IsReady implements [moon.Service].
-func (me *Service) IsReady() bool {
+func (me *impl) IsReady() bool {
 	return true
 }
 
@@ -113,7 +172,7 @@ type redirectionRecord struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (me *Service) flushRedirectionBatch(batch []redirectionRecord) {
+func (me *impl) flushRedirectionBatch(batch []redirectionRecord) {
 	raw, err := json.Marshal(batch)
 	if err != nil {
 		me.logger.Error("failed to marshal redirection batch", "count", len(batch), "error", err)
@@ -138,13 +197,13 @@ func (me *Service) flushRedirectionBatch(batch []redirectionRecord) {
 	}
 }
 
-func (me *Service) recycleRedirectionBatch(batch *[]redirectionRecord) {
+func (me *impl) recycleRedirectionBatch(batch *[]redirectionRecord) {
 	clear(*batch)
 	*batch = (*batch)[:0]
 	me.redirectionPool.Put(batch)
 }
 
-func (me *Service) addToRedirectionBatch(record redirectionRecord) {
+func (me *impl) addToRedirectionBatch(record redirectionRecord) {
 	*me.currentRedirectionBatch = append(*me.currentRedirectionBatch, record)
 	if len(*me.currentRedirectionBatch) == redirectionBatchSize {
 		me.redirectionBatches <- me.currentRedirectionBatch
@@ -153,7 +212,7 @@ func (me *Service) addToRedirectionBatch(record redirectionRecord) {
 	}
 }
 
-func (me *Service) flushAndCloseRedirectionBatches() {
+func (me *impl) flushAndCloseRedirectionBatches() {
 	if len(*me.currentRedirectionBatch) > 0 {
 		me.redirectionBatches <- me.currentRedirectionBatch
 		me.lastRedirectionFlush = time.Now()
@@ -163,7 +222,7 @@ func (me *Service) flushAndCloseRedirectionBatches() {
 	close(me.redirectionBatches)
 }
 
-func (me *Service) redirectionRecordsBufferJob(ctx context.Context) error {
+func (me *impl) redirectionRecordsBufferJob(ctx context.Context) error {
 	ticker := time.NewTicker(redirectionFlushInterval)
 	defer ticker.Stop()
 
@@ -193,7 +252,7 @@ func (me *Service) redirectionRecordsBufferJob(ctx context.Context) error {
 	}
 }
 
-func (me *Service) redirectionRecordsFlusherJob(ctx context.Context) error {
+func (me *impl) redirectionRecordsFlusherJob(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -212,10 +271,7 @@ func (me *Service) redirectionRecordsFlusherJob(ctx context.Context) error {
 	}
 }
 
-// Record buffers a click for asynchronous persistence. Records are written in
-// batches by the background flusher, so a nil error only means the click was
-// accepted for recording; it does not mean it has been written to the database.
-func (me *Service) Record(ctx context.Context, urlId, userId uuid.UUID, ip, platform, os string) error {
+func (me *impl) Record(ctx context.Context, urlId, userId uuid.UUID, ip, platform, os string) error {
 	record := redirectionRecord{
 		Id:        uuid.NewV7(),
 		UrlId:     urlId,
@@ -234,6 +290,7 @@ func (me *Service) Record(ctx context.Context, urlId, userId uuid.UUID, ip, plat
 	}
 }
 
+// Redirection is a recorded click on a short link.
 type Redirection struct {
 	Id        uuid.UUID
 	UrlId     uuid.UUID
@@ -244,6 +301,8 @@ type Redirection struct {
 	CreatedAt time.Time
 }
 
+// RedirectionsSort is a sort order for [Service.GetUserRedirections] and
+// [Service.GetUrlRedirections].
 type RedirectionsSort string
 
 const (
@@ -277,13 +336,11 @@ func toRedirection(r queries.RedirectionRedirection) Redirection {
 	}
 }
 
-func (me *Service) GetUserRedirections(
+func (me *impl) GetUserRedirections(
 	ctx context.Context,
 	userId uuid.UUID,
 	sort RedirectionsSort,
-	lastCreatedAt time.Time,
-	lastOs, lastPlatform string,
-	lastRedirectionId uuid.UUID,
+	lastCreatedAt time.Time, lastOs, lastPlatform string, lastRedirectionId uuid.UUID,
 	limit int,
 ) ([]Redirection, error) {
 	if !sort.isValid() {
@@ -311,7 +368,7 @@ func (me *Service) GetUserRedirections(
 	return redirections, nil
 }
 
-func (me *Service) GetRedirectionById(ctx context.Context, redirectionId, userId uuid.UUID) (*Redirection, error) {
+func (me *impl) GetRedirectionById(ctx context.Context, redirectionId, userId uuid.UUID) (*Redirection, error) {
 	row, err := me.queries.GetRedirectionById(ctx, queries.GetRedirectionByIdParams{
 		Id:     redirectionId,
 		UserId: userId,
@@ -326,13 +383,11 @@ func (me *Service) GetRedirectionById(ctx context.Context, redirectionId, userId
 	return new(toRedirection(row)), nil
 }
 
-func (me *Service) GetUrlRedirections(
+func (me *impl) GetUrlRedirections(
 	ctx context.Context,
 	urlId uuid.UUID,
 	sort RedirectionsSort,
-	lastCreatedAt time.Time,
-	lastOs, lastPlatform string,
-	lastRedirectionId uuid.UUID,
+	lastCreatedAt time.Time, lastOs, lastPlatform string, lastRedirectionId uuid.UUID,
 	limit int,
 ) ([]Redirection, error) {
 	if !sort.isValid() {
@@ -358,5 +413,4 @@ func (me *Service) GetUrlRedirections(
 	}
 
 	return redirections, nil
-
 }

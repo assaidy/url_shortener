@@ -14,8 +14,6 @@ import (
 	"github.com/assaidy/moon"
 	"github.com/assaidy/url_shortener/src/events"
 	"github.com/assaidy/url_shortener/src/services/auth/queries"
-	postgres_service "github.com/assaidy/url_shortener/src/services/postgres"
-	redis_service "github.com/assaidy/url_shortener/src/services/redis"
 	"github.com/assaidy/url_shortener/src/utils"
 	"github.com/assaidy/workers"
 	"github.com/assaidy/workers/lock"
@@ -25,10 +23,80 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var _ moon.Service = (*Service)(nil)
+// Service manages user accounts, credentials, and authentication sessions.
+type Service interface {
+	// Register creates a user account with the given name, username, and
+	// password. The password is stored as a bcrypt hash.
+	//
+	// Errors:
+	//   - [ErrUsernameConflict]: the username is already taken.
+	Register(ctx context.Context, name, username, password string) error
+
+	// Login verifies the supplied credentials and creates a new session. The
+	// raw User-Agent is used to record the session's platform and operating
+	// system.
+	//
+	// Errors:
+	//   - [ErrUnauthorized]: the username does not exist or the password is
+	//     wrong.
+	Login(ctx context.Context, username, password string, userAgent string) (*Session, error)
+
+	// GetSession returns the session with the given ID.
+	//
+	// Errors:
+	//   - [ErrSessionNotFound]: no session with this ID exists.
+	GetSession(ctx context.Context, sessionId uuid.UUID) (*Session, error)
+
+	// DeleteSession deletes a session owned by userId.
+	//
+	// Errors:
+	//   - [ErrUserNotFound]: the user does not exist.
+	//   - [ErrSessionNotFound]: the user owns no session with this ID.
+	DeleteSession(ctx context.Context, sessionId, userId uuid.UUID) error
+
+	// EditUsername changes the username of the given user.
+	//
+	// Errors:
+	//   - [ErrUserNotFound]: the user does not exist.
+	//   - [ErrUsernameConflict]: the new username is already taken.
+	EditUsername(ctx context.Context, userId uuid.UUID, newUsername string) error
+
+	// EditPassword changes the user's password after verifying the current
+	// one. All of the user's other sessions are deleted, keeping sessionId
+	// active.
+	//
+	// Errors:
+	//   - [ErrUserNotFound]: the user does not exist.
+	//   - [ErrInvalidOldPassword]: oldPassword does not match the current password.
+	EditPassword(ctx context.Context, sessionId, userId uuid.UUID, oldPassword, newPassword string) error
+
+	// GetAccount returns the public profile of the given user.
+	//
+	// Errors:
+	//   - [ErrUserNotFound]: the user does not exist.
+	GetAccount(ctx context.Context, userId uuid.UUID) (*Account, error)
+
+	// DeleteAccount soft-deletes the given user and deletes all of their
+	// sessions. A user deleted event is published after the deletion
+	// commits; a failure to publish it is logged and does not fail the call.
+	//
+	// Errors:
+	//   - [ErrUserNotFound]: the user does not exist.
+	DeleteAccount(ctx context.Context, userId uuid.UUID) error
+
+	// CheckUser reports whether userId belongs to a user that exists and has
+	// not been soft-deleted. It returns no sentinel errors; a missing user
+	// is reported as false.
+	CheckUser(ctx context.Context, userId uuid.UUID) (bool, error)
+}
+
+var (
+	_ moon.Service = (*impl)(nil)
+	_ Service      = (*impl)(nil)
+)
 
 // Service manages user accounts, credentials, and authentication sessions.
-type Service struct {
+type impl struct {
 	db            *sql.DB
 	queries       *queries.Queries
 	rdb           *redis.Client
@@ -37,13 +105,13 @@ type Service struct {
 }
 
 // New returns a Service backed by db.
-func New() moon.ServiceConstructor[*Service] {
-	return func(i moon.Injected) *Service {
-		logger := i.GetDependency[*slog.Logger]()
-		db := i.GetService[*postgres_service.Service]().GetDb()
-		rdb := i.GetService[*redis_service.Service]().GetClient()
+func New() moon.ServiceConstructor {
+	return func(deps *moon.DependencyContainer) moon.Service {
+		logger := deps.Get[*slog.Logger]()
+		db := deps.Get[*sql.DB]()
+		rdb := deps.Get[*redis.Client]()
 
-		service := &Service{
+		service := &impl{
 			db:      db,
 			queries: queries.New(db),
 			rdb:     rdb,
@@ -68,30 +136,30 @@ func New() moon.ServiceConstructor[*Service] {
 }
 
 // Name implements [moon.Service].
-func (me *Service) Name() string {
+func (me *impl) Name() string {
 	return "auth"
 }
 
 // Start implements [moon.Service].
-func (me *Service) Start() error {
+func (me *impl) Start(deps *moon.DependencyContainer) error {
 	me.workerManager.Start()
+	deps.Set(Service(me))
 	return nil
 }
 
 // Stop implements [moon.Service].
-func (me *Service) Stop() error {
+func (me *impl) Stop(deps *moon.DependencyContainer) error {
+	deps.Delete[Service]()
 	me.workerManager.Stop()
 	return nil
 }
 
 // IsReady implements [moon.Service].
-func (me *Service) IsReady() bool {
+func (me *impl) IsReady() bool {
 	return true
 }
 
-// Register creates a user account with the given name, username, and password.
-// It returns ErrUsernameConflict if the username is already taken.
-func (me *Service) Register(ctx context.Context, name, username, password string) error {
+func (me *impl) Register(ctx context.Context, name, username, password string) error {
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password")
@@ -119,7 +187,7 @@ func (me *Service) Register(ctx context.Context, name, username, password string
 
 type unlockFunc func(ctx context.Context) error
 
-func (me *Service) lockUsername(ctx context.Context, username string) (unlockFunc, error) {
+func (me *impl) lockUsername(ctx context.Context, username string) (unlockFunc, error) {
 	lock := redislock.New(redislock_adapter.New(me.rdb), "username:"+username, redislock.WithAutoRenew())
 	if err := lock.SpinLock(ctx, 5*time.Second); err != nil {
 		return nil, fmt.Errorf("failed to lock username %q: %w", username, err)
@@ -140,10 +208,7 @@ type Session struct {
 	Os        string
 }
 
-// Login verifies the supplied credentials and creates a session. The raw
-// User-Agent is used to record the session's platform and operating system. It
-// returns ErrUnauthorized when the credentials are invalid.
-func (me *Service) Login(ctx context.Context, username, password string, userAgent string) (*Session, error) {
+func (me *impl) Login(ctx context.Context, username, password string, userAgent string) (*Session, error) {
 	platform := utils.ExtractPlatformFromUserAgent(userAgent)
 	os := utils.ExtractOsFromUserAgent(userAgent)
 
@@ -199,9 +264,7 @@ func (me *Service) Login(ctx context.Context, username, password string, userAge
 	}, nil
 }
 
-// GetSession returns the session with the given ID. It returns
-// ErrSessionNotFound when no such session exists.
-func (me *Service) GetSession(ctx context.Context, sessionId uuid.UUID) (*Session, error) {
+func (me *impl) GetSession(ctx context.Context, sessionId uuid.UUID) (*Session, error) {
 	session, err := me.queries.GetSessionById(ctx, sessionId)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -222,10 +285,7 @@ func (me *Service) GetSession(ctx context.Context, sessionId uuid.UUID) (*Sessio
 	}, nil
 }
 
-// DeleteSession deletes a session owned by userId. It returns ErrUserNotFound
-// when the user does not exist and ErrSessionNotFound when the user owns no
-// session with the given ID.
-func (me *Service) DeleteSession(ctx context.Context, sessionId, userId uuid.UUID) error {
+func (me *impl) DeleteSession(ctx context.Context, sessionId, userId uuid.UUID) error {
 	tx, err := me.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin tx: %w", err)
@@ -255,10 +315,7 @@ func (me *Service) DeleteSession(ctx context.Context, sessionId, userId uuid.UUI
 	return nil
 }
 
-// EditUsername changes the username of the given user. It returns
-// ErrUserNotFound when the user does not exist and ErrUsernameConflict when the
-// new username is already taken.
-func (me *Service) EditUsername(ctx context.Context, userId uuid.UUID, newUsername string) error {
+func (me *impl) EditUsername(ctx context.Context, userId uuid.UUID, newUsername string) error {
 	unlock, err := me.lockUsername(ctx, newUsername)
 	if err != nil {
 		return err
@@ -285,10 +342,7 @@ func (me *Service) EditUsername(ctx context.Context, userId uuid.UUID, newUserna
 
 // TODO: Reset a forgotten password using a emailed token.
 
-// EditPassword changes the user's password after verifying the current one.
-// All of the user's other sessions are deleted, keeping sessionId active. It
-// returns ErrUserNotFound or ErrInvalidOldPassword when appropriate.
-func (me *Service) EditPassword(ctx context.Context, sessionId, userId uuid.UUID, oldPassword, newPassword string) error {
+func (me *impl) EditPassword(ctx context.Context, sessionId, userId uuid.UUID, oldPassword, newPassword string) error {
 	tx, err := me.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin tx: %w", err)
@@ -342,9 +396,7 @@ type Account struct {
 	CreatedAt time.Time
 }
 
-// GetAccount returns the public profile of the given user. It returns
-// ErrUserNotFound when the user does not exist.
-func (me *Service) GetAccount(ctx context.Context, userId uuid.UUID) (*Account, error) {
+func (me *impl) GetAccount(ctx context.Context, userId uuid.UUID) (*Account, error) {
 	user, err := me.queries.GetUserById(ctx, userId)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -361,9 +413,7 @@ func (me *Service) GetAccount(ctx context.Context, userId uuid.UUID) (*Account, 
 	}, nil
 }
 
-// DeleteAccount soft-deletes the given user and deletes their sessions. It
-// returns ErrUserNotFound when the user does not exist.
-func (me *Service) DeleteAccount(ctx context.Context, userId uuid.UUID) error {
+func (me *impl) DeleteAccount(ctx context.Context, userId uuid.UUID) error {
 	tx, err := me.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin tx: %w", err)
@@ -402,8 +452,7 @@ func (me *Service) DeleteAccount(ctx context.Context, userId uuid.UUID) error {
 	return nil
 }
 
-// CheckUser reports whether userId belongs to a user that exists and has not been soft-deleted.
-func (me *Service) CheckUser(ctx context.Context, userId uuid.UUID) (bool, error) {
+func (me *impl) CheckUser(ctx context.Context, userId uuid.UUID) (bool, error) {
 	ok, err := me.queries.CheckUserId(ctx, userId)
 	if err != nil {
 		return false, fmt.Errorf("failed to check user id: %w", err)
@@ -411,7 +460,7 @@ func (me *Service) CheckUser(ctx context.Context, userId uuid.UUID) (bool, error
 	return ok, nil
 }
 
-func (me *Service) sessionCleanupJob(ctx context.Context) error {
+func (me *impl) sessionCleanupJob(ctx context.Context) error {
 	if err := me.queries.BatchDeleteExpiredOrSoftDeletedSessions(ctx); err != nil {
 		return fmt.Errorf("failed to batch delete expired or soft-deleted sessions: %w", err)
 	}

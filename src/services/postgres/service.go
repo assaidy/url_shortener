@@ -9,30 +9,26 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var _ moon.Service = (*Service)(nil)
+var _ moon.Service = (*impl)(nil)
 
-type Service struct {
+type impl struct {
 	url  string
 	pool *sql.DB
 }
 
-func New(url string) moon.ServiceConstructor[*Service] {
-	return func(i moon.Injected) *Service {
-		return &Service{url: url}
+func New(url string) moon.ServiceConstructor {
+	return func(dependencies *moon.DependencyContainer) moon.Service {
+		return &impl{url: url}
 	}
 }
 
-func (me *Service) GetDb() *sql.DB {
-	return me.pool
-}
-
 // Name implements [moon.Service].
-func (me *Service) Name() string {
+func (me *impl) Name() string {
 	return "postgres"
 }
 
 // Start implements [moon.Service].
-func (me *Service) Start() error {
+func (me *impl) Start(deps *moon.DependencyContainer) error {
 	pool, err := sql.Open("postgres", me.url)
 	if err != nil {
 		return err
@@ -50,16 +46,20 @@ func (me *Service) Start() error {
 	pool.SetConnMaxIdleTime(1 * time.Minute)
 
 	me.pool = pool
+
+	deps.Set(me.pool)
+
 	return nil
 }
 
 // Stop implements [moon.Service].
-func (me *Service) Stop() error {
+func (me *impl) Stop(deps *moon.DependencyContainer) error {
+	deps.Delete[*sql.DB]()
 	return me.pool.Close()
 }
 
 // IsReady implements [moon.Service].
-func (me *Service) IsReady() bool {
+func (me *impl) IsReady() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return me.pool.PingContext(ctx) == nil
