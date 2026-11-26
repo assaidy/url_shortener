@@ -31,7 +31,7 @@ The API listens on `:3000`. Local development defaults live in the committed `.e
 ### Link Management
 - **Short Links:** Create links with a destination URL, title, and optional expiry.
 - **Alias Generation:** Random aliases start at 5 letters and grow automatically when the current length is exhausted.
-- **Listing:** Paginated listing of your links with sorting by `title`, `url`, `alias`, or `created_at` (newest first by default), plus title search.
+- **Listing:** Paginated listing of your links with sorting by `title`, `url`, `alias`, or `created_at` (newest first by default), plus title and URL search.
 - **Editing:** Update the title, expiry, or active status. Destination, alias, and owner are immutable.
 - **Soft Deletion:** Deleted links keep their alias reserved and are excluded from management endpoints.
 
