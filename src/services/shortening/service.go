@@ -37,9 +37,14 @@ type Service interface {
 	// GetUserUrls returns a page of the non-deleted urls owned by userId,
 	// filtered by search and ordered by sort. search is a case-insensitive
 	// substring match against the title and url, so "hub" matches
-	// "github.com/...". An empty search matches every url. The last* arguments
-	// are the cursor: when lastId is the nil UUID the first page is returned,
-	// and limit caps the page size.
+	// "github.com/...". An empty search matches every url.
+	//
+	// Urls with equal sort values are ordered by id, newest first, in both
+	// directions, so the order is stable across pages. The last* arguments
+	// describe the last url of the previous page and form the cursor: lastId
+	// is required, and only the argument matching sort is used (lastClicks for
+	// the clicks sorts, and so on). When lastId is the nil UUID the first page
+	// is returned, and limit caps the page size.
 	//
 	// Errors:
 	//   - [ErrInvalidSort]: sort is not a known [UserUrlsSort] value.
@@ -48,7 +53,7 @@ type Service interface {
 		userId uuid.UUID,
 		search string,
 		sort UserUrlsSort,
-		lastTitle, lastUrl, lastAlias string, lastCreatedAt time.Time, lastId uuid.UUID,
+		lastTitle, lastUrl, lastAlias string, lastCreatedAt time.Time, lastClicks int64, lastId uuid.UUID,
 		limit int,
 	) ([]Url, error)
 
@@ -242,6 +247,8 @@ const (
 	SortAliasDescending     UserUrlsSort = "alias.desc"
 	SortCreatedAtAscending  UserUrlsSort = "created_at.asc"
 	SortCreatedAtDescending UserUrlsSort = "created_at.desc"
+	SortClicksAscending     UserUrlsSort = "clicks.asc"
+	SortClicksDescending    UserUrlsSort = "clicks.desc"
 )
 
 func (me UserUrlsSort) isValid() bool {
@@ -249,7 +256,8 @@ func (me UserUrlsSort) isValid() bool {
 	case SortCreatedAtAscending, SortCreatedAtDescending,
 		SortTitleAscending, SortTitleDescending,
 		SortUrlAscending, SortUrlDescending,
-		SortAliasAscending, SortAliasDescending:
+		SortAliasAscending, SortAliasDescending,
+		SortClicksAscending, SortClicksDescending:
 		return true
 	}
 	return false
@@ -263,7 +271,7 @@ func (me *impl) GetUserUrls(
 	userId uuid.UUID,
 	search string,
 	sort UserUrlsSort,
-	lastTitle, lastUrl, lastAlias string, lastCreatedAt time.Time, lastId uuid.UUID,
+	lastTitle, lastUrl, lastAlias string, lastCreatedAt time.Time, lastClicks int64, lastId uuid.UUID,
 	limit int,
 ) ([]Url, error) {
 	if !sort.isValid() {
@@ -277,6 +285,7 @@ func (me *impl) GetUserUrls(
 		LastUrl:       utils.NullString(lastUrl),
 		LastAlias:     utils.NullString(lastAlias),
 		LastCreatedAt: utils.NullTime(lastCreatedAt),
+		LastClicks:    sql.NullInt64{Int64: lastClicks, Valid: lastClicks != -1},
 		LastId:        utils.UuidPtr(lastId),
 		Sort:          string(sort),
 		Limit:         int32(limit),

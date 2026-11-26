@@ -141,13 +141,17 @@ func GetUrls(ctx *moon.Context) error {
 		LastUrl       string    `json:"lastUrl"`
 		LastAlias     string    `json:"lastAlias"`
 		LastCreatedAt time.Time `json:"lastCreatedAt"`
+		LastClicks    int64     `json:"lastClicks"`
 		LastId        uuid.UUID `json:"lastId"`
 	}
 
 	paginationInfo, ok := ctx.GetLocal[*pagination.Info](pagination.DefaultLocalKey)
 	moon.Assert(ok)
 
-	var requestCursor cursor
+	// LastClicks defaults to -1, not 0, because 0 is a valid click count and
+	// must not be mistaken for a missing value. The default is set before
+	// decoding so cursors without lastClicks keep it.
+	requestCursor := cursor{LastClicks: -1}
 	if encodedCursor := paginationInfo.GetCursor(); encodedCursor != "" {
 		if err := pagination.DecodeCursor([]byte(encodedCursor), &requestCursor); err != nil {
 			return ErrInvalidCursor
@@ -169,6 +173,7 @@ func GetUrls(ctx *moon.Context) error {
 		requestCursor.LastUrl,
 		requestCursor.LastAlias,
 		requestCursor.LastCreatedAt,
+		requestCursor.LastClicks,
 		requestCursor.LastId,
 		paginationInfo.GetLimit(),
 	)
@@ -189,6 +194,7 @@ func GetUrls(ctx *moon.Context) error {
 			LastUrl:       last.Url,
 			LastAlias:     last.Alias,
 			LastCreatedAt: last.CreatedAt,
+			LastClicks:    last.Clicks,
 			LastId:        last.Id,
 		})
 		if err != nil {
@@ -225,6 +231,11 @@ func getUserUrlsSort(sort pagination.Sort) shortening_service.UserUrlsSort {
 			return shortening_service.SortCreatedAtAscending
 		}
 		return shortening_service.SortCreatedAtDescending
+	case "clicks":
+		if sort.Order == pagination.OrderAscending {
+			return shortening_service.SortClicksAscending
+		}
+		return shortening_service.SortClicksDescending
 	}
 	return ""
 }

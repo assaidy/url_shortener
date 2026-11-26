@@ -46,6 +46,12 @@ where user_id = $1 and deleted_at is null
     when 'created_at.desc' then
       created_at < sqlc.narg(last_created_at)::timestamptz
       or (created_at = sqlc.narg(last_created_at)::timestamptz and id < sqlc.narg(last_id)::uuid)
+    when 'clicks.asc' then
+      clicks > sqlc.narg(last_clicks)::bigint
+      or (clicks = sqlc.narg(last_clicks)::bigint and id < sqlc.narg(last_id)::uuid)
+    when 'clicks.desc' then
+      clicks < sqlc.narg(last_clicks)::bigint
+      or (clicks = sqlc.narg(last_clicks)::bigint and id < sqlc.narg(last_id)::uuid)
   end
 )
 order by
@@ -57,6 +63,8 @@ order by
     case when sqlc.arg(sort)::text = 'alias.desc' then alias end desc,
     case when sqlc.arg(sort)::text = 'created_at.asc' then created_at end asc,
     case when sqlc.arg(sort)::text = 'created_at.desc' then created_at end desc,
+    case when sqlc.arg(sort)::text = 'clicks.asc' then clicks end asc,
+    case when sqlc.arg(sort)::text = 'clicks.desc' then clicks end desc,
     id desc
 limit $2;
 

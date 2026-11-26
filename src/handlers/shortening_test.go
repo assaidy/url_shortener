@@ -161,6 +161,32 @@ func urlIDsInDBOrder(t *testing.T, dbURL, userID, orderBy string) []string {
 	return ids
 }
 
+// spreadUrlClicks gives the user's urls click counts that cycle through
+// 0, 5, 10, 15. Clicks normally arrive asynchronously through the url clicked
+// event, so tests set them directly. The cycle produces ties, including at
+// zero, so sorting by clicks has to fall back on the id tiebreaker and a
+// cursor can land on a zero count.
+func spreadUrlClicks(t *testing.T, dbURL, userID string) {
+	t.Helper()
+
+	db, err := sql.Open("postgres", dbURL)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	_, err = db.Exec(`
+		update shortening.urls u
+		set clicks = (r.n % 4) * 5
+		from (
+			select id, row_number() over (order by id) - 1 as n
+			from shortening.urls
+			where user_id = $1::uuid
+		) r
+		where u.id = r.id`,
+		userID,
+	)
+	require.NoError(t, err)
+}
+
 func rawCursor(t *testing.T, raw string) string {
 	t.Helper()
 
@@ -382,6 +408,7 @@ func TestGetUrls(t *testing.T) {
 	for i := range 9 {
 		seed(fmt.Sprintf("Bulk %d", i), fmt.Sprintf("https://example.com/bulk/%d", i))
 	}
+	spreadUrlClicks(t, dbURL, userID)
 
 	t.Run("paginates with cursors", func(t *testing.T) {
 		all := listUrls(t, app, cookies, url.Values{"limit": {"100"}})
@@ -491,6 +518,7 @@ func TestGetUrls(t *testing.T) {
 				{"number", "123"},
 				{"non-uuid lastId", `{"lastId":"not-a-uuid"}`},
 				{"numeric lastId", `{"lastId":123}`},
+				{"non-numeric lastClicks", `{"lastClicks":"many"}`},
 			}
 
 			for _, tc := range cases {
@@ -517,6 +545,8 @@ func TestGetUrls(t *testing.T) {
 			{"alias descending", "-alias", "alias desc, id desc"},
 			{"created_at ascending", "created_at", "created_at asc, id desc"},
 			{"created_at descending", "-created_at", "created_at desc, id desc"},
+			{"clicks ascending", "clicks", "clicks asc, id desc"},
+			{"clicks descending", "-clicks", "clicks desc, id desc"},
 		}
 
 		for _, tc := range cases {
@@ -533,25 +563,36 @@ func TestGetUrls(t *testing.T) {
 	})
 
 	t.Run("paginates sorted results with cursors", func(t *testing.T) {
-		full := listUrls(t, app, cookies, url.Values{"limit": {"100"}, "sort": {"title"}})
-
-		var walked []listedUrl
-		query := url.Values{"limit": {"5"}, "sort": {"title"}}
-		pages := 0
-		for {
-			page := listUrls(t, app, cookies, query)
-			pages++
-			require.Less(t, pages, 10, "pagination did not terminate")
-
-			walked = append(walked, page.Items...)
-			if page.NextCursor == "" {
-				break
-			}
-			query = url.Values{"limit": {"5"}, "sort": {"title"}, "cursor": {page.NextCursor}}
+		sorts := []string{
+			"title", "-title", "url", "-url", "alias", "-alias",
+			"created_at", "-created_at", "clicks", "-clicks",
 		}
 
-		require.Equal(t, 3, pages)
-		require.Equal(t, listedUrlIDs(full.Items), listedUrlIDs(walked))
+		for _, sortKey := range sorts {
+			for _, limit := range []string{"3", "5"} {
+				t.Run(sortKey+" limit "+limit, func(t *testing.T) {
+					full := listUrls(t, app, cookies, url.Values{"limit": {"100"}, "sort": {sortKey}})
+					require.Len(t, full.Items, 12)
+
+					var walked []listedUrl
+					query := url.Values{"limit": {limit}, "sort": {sortKey}}
+					pages := 0
+					for {
+						page := listUrls(t, app, cookies, query)
+						pages++
+						require.Less(t, pages, 10, "pagination did not terminate")
+
+						walked = append(walked, page.Items...)
+						if page.NextCursor == "" {
+							break
+						}
+						query = url.Values{"limit": {limit}, "sort": {sortKey}, "cursor": {page.NextCursor}}
+					}
+
+					require.Equal(t, listedUrlIDs(full.Items), listedUrlIDs(walked))
+				})
+			}
+		}
 	})
 
 	t.Run("searches titles", func(t *testing.T) {
@@ -703,7 +744,7 @@ func TestGetUrls(t *testing.T) {
 	})
 
 	t.Run("rejects unknown sort keys", func(t *testing.T) {
-		resp := doJSON(t, app, http.MethodGet, "/urls?sort=clicks", nil, cookies...)
+		resp := doJSON(t, app, http.MethodGet, "/urls?sort=name", nil, cookies...)
 		requireError(t, resp, http.StatusBadRequest, "bad_request")
 	})
 }

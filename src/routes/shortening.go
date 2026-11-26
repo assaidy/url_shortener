@@ -19,8 +19,7 @@ func mapShortening(app *moon.App) {
 				pagination.WithPageQueryKey(""),
 				pagination.WithOffsetQueryKey(""),
 				pagination.WithSortQueryKey("sort"),
-				// TODO: add sort by clicks
-				pagination.WithAllowedSortKeys([]string{"title", "url", "alias", "created_at"}),
+				pagination.WithAllowedSortKeys([]string{"title", "url", "alias", "created_at", "clicks"}),
 				pagination.WithDefaultSort([]pagination.Sort{{Key: "created_at", Order: pagination.OrderDescending}}),
 			),
 		),
