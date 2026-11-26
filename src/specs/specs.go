@@ -165,12 +165,22 @@ func limitParameter() moon.ApiParameter {
 	}
 }
 
+// searchParameter documents the search query parameter used to filter lists.
+func searchParameter(description string) moon.ApiParameter {
+	return moon.ApiParameter{
+		Name:        "search",
+		In:          moon.ApiParamInQuery,
+		Description: description,
+		Schema:      moon.Object{"type": "string"},
+	}
+}
+
 // sortParameter documents the sort query parameter used by pagination.
 func sortParameter(keys ...string) moon.ApiParameter {
 	return moon.ApiParameter{
 		Name:        "sort",
 		In:          moon.ApiParamInQuery,
-		Description: "The sort key, optionally prefixed with - for descending order. Allowed keys: " + strings.Join(keys, ", ") + ".",
+		Description: "The sort key, optionally prefixed with - for descending order. Only one key is allowed. Allowed keys: " + strings.Join(keys, ", ") + ".",
 		Schema:      moon.Object{"type": "string"},
 	}
 }

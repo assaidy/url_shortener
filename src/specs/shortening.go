@@ -23,14 +23,16 @@ var (
 
 	GetUrls = moon.NewApiSpec(
 		moon.WithSummary("List short links"),
-		moon.WithDescription("Returns the current user's short links ordered newest first."),
+		moon.WithDescription("Returns the current user's short links, newest first by default. Results can be filtered with a search term and ordered by one sort key. Links with equal sort values are ordered by newest first, so pages are stable. Pagination is cursor based: pass the nextCursor of a page as the cursor of the next request, and keep the same search and sort."),
 		moon.WithOperationId("getUrls"),
 		moon.WithTags("Links"),
 		moon.WithSecurity(sessionSecurity),
+		moon.WithParameter(searchParameter("A case-insensitive substring matched against the title and url. Omit it or leave it blank to list every link.")),
+		moon.WithParameter(sortParameter("title", "url", "alias", "created_at", "clicks")),
 		moon.WithParameter(limitParameter()),
 		moon.WithParameter(cursorParameter()),
 		moon.WithResponse(jsonResponse(http.StatusOK, "The current user's short links.", urlPageSchema)),
-		moon.WithResponse(errorResponse(http.StatusBadRequest, "The cursor is invalid.", handlers.ErrInvalidCursor)),
+		moon.WithResponse(errorResponse(http.StatusBadRequest, "The limit, sort, or cursor is invalid.", moon.ErrBadRequest, handlers.ErrInvalidCursor)),
 		moon.WithResponse(errorResponse(http.StatusUnauthorized, "Authentication failed.", moon.ErrUnauthorized)),
 	)
 
