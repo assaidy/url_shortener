@@ -86,28 +86,6 @@ type redirectionCursor struct {
 	LastRedirectionId uuid.UUID `json:"lastRedirectionId"`
 }
 
-// readRedirectionCursor decodes the pagination cursor. A zero cursor means the
-// first page; any other cursor must be fully populated, because only the app
-// creates cursors.
-func readRedirectionCursor(paginationInfo *pagination.Info) (redirectionCursor, error) {
-	var cursor redirectionCursor
-	if encodedCursor := paginationInfo.GetCursor(); encodedCursor != "" {
-		if err := pagination.DecodeCursor([]byte(encodedCursor), &cursor); err != nil {
-			return redirectionCursor{}, ErrInvalidCursor
-		}
-	}
-
-	if cursor != (redirectionCursor{}) &&
-		(cursor.LastCreatedAt.IsZero() ||
-			cursor.LastOs == "" ||
-			cursor.LastPlatform == "" ||
-			cursor.LastRedirectionId == uuid.Nil()) {
-		return redirectionCursor{}, ErrInvalidCursor
-	}
-
-	return cursor, nil
-}
-
 func getRedirectionsSort(sort pagination.Sort) redirection_service.RedirectionsSort {
 	switch sort.Key {
 	case "created_at":
@@ -147,9 +125,11 @@ func GetRedirections(ctx *moon.Context) error {
 	paginationInfo, ok := ctx.GetLocal[*pagination.Info](pagination.DefaultLocalKey)
 	moon.Assert(ok)
 
-	cursor, err := readRedirectionCursor(paginationInfo)
-	if err != nil {
-		return err
+	var cursor redirectionCursor
+	if encodedCursor := paginationInfo.GetCursor(); encodedCursor != "" {
+		if err := pagination.DecodeCursor([]byte(encodedCursor), &cursor); err != nil {
+			return ErrInvalidCursor
+		}
 	}
 
 	sort := paginationInfo.GetSort()
@@ -218,9 +198,11 @@ func GetUrlRedirections(ctx *moon.Context) error {
 	paginationInfo, ok := ctx.GetLocal[*pagination.Info](pagination.DefaultLocalKey)
 	moon.Assert(ok)
 
-	cursor, err := readRedirectionCursor(paginationInfo)
-	if err != nil {
-		return err
+	var cursor redirectionCursor
+	if encodedCursor := paginationInfo.GetCursor(); encodedCursor != "" {
+		if err := pagination.DecodeCursor([]byte(encodedCursor), &cursor); err != nil {
+			return ErrInvalidCursor
+		}
 	}
 
 	sort := paginationInfo.GetSort()

@@ -154,16 +154,6 @@ func GetUrls(ctx *moon.Context) error {
 		}
 	}
 
-	// Ensure the cursor is either empty (first request) or fully populated
-	// (app-encoded cursor). LastTitle is excluded because titles may be empty.
-	if requestCursor != (cursor{}) &&
-		(requestCursor.LastUrl == "" ||
-			requestCursor.LastAlias == "" ||
-			requestCursor.LastCreatedAt.IsZero() ||
-			requestCursor.LastId == uuid.Nil()) {
-		return ErrInvalidCursor
-	}
-
 	sort := paginationInfo.GetSort()
 	if len(sort) != 1 {
 		return moon.ErrBadRequest.WithDetails("only one sort key is allowed")
