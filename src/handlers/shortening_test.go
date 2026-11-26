@@ -607,6 +607,96 @@ func TestGetUrls(t *testing.T) {
 		require.Equal(t, listedUrlIDs(full.Items), listedUrlIDs(walked))
 	})
 
+	// The search cases below use their own user, so the extra urls don't
+	// change the counts the tests above assert for the main user.
+	searchCookies := registerAndLogin(t, app, "get_urls_search_user")
+
+	seedSearch := func(title, rawUrl string) createdUrl {
+		return createUrl(t, app, searchCookies, map[string]any{
+			"url":   rawUrl,
+			"title": title,
+		})
+	}
+
+	searchIDs := func(t *testing.T, term string) []string {
+		t.Helper()
+		page := listUrls(t, app, searchCookies, url.Values{"limit": {"100"}, "search": {term}})
+		return listedUrlIDs(page.Items)
+	}
+
+	byTitle := seedSearch("Hubble Telescope", "https://example.com/space")
+	byUrl := seedSearch("Docs", "https://github.com/assaidy/moon")
+	byAlias := seedSearch("Plain", "https://example.com/plain")
+	percent := seedSearch("100% Done", "https://example.com/percent")
+	underscore := seedSearch("my_app", "https://example.com/underscore")
+	backslash := seedSearch(`C:\dev`, "https://example.com/backslash")
+	// "myXapp" would match "my_app" and "_" if underscore acted as a wildcard.
+	seedSearch("myXapp", "https://example.com/decoy")
+	seedSearch("Unrelated", "https://example.com/other")
+
+	t.Run("search matches a substring of the title", func(t *testing.T) {
+		require.Equal(t, []string{byTitle.ID}, searchIDs(t, "bble Tel"))
+	})
+
+	t.Run("search matches a substring of the url", func(t *testing.T) {
+		require.Equal(t, []string{byUrl.ID}, searchIDs(t, "hub.com"))
+	})
+
+	t.Run("search does not match the alias", func(t *testing.T) {
+		require.NotEmpty(t, byAlias.Alias)
+		require.NotContains(t, searchIDs(t, byAlias.Alias), byAlias.ID)
+		require.NotContains(t, searchIDs(t, strings.ToUpper(byAlias.Alias)), byAlias.ID)
+	})
+
+	t.Run("search matches inside a word", func(t *testing.T) {
+		// "hub" is inside "github.com" and at the start of "Hubble".
+		require.ElementsMatch(t, []string{byUrl.ID, byTitle.ID}, searchIDs(t, "hub"))
+	})
+
+	t.Run("search ignores case in urls and titles", func(t *testing.T) {
+		require.Equal(t, []string{byTitle.ID}, searchIDs(t, "BBLE TEL"))
+		require.Equal(t, []string{byUrl.ID}, searchIDs(t, "HUB.COM"))
+	})
+
+	t.Run("search treats percent as a literal character", func(t *testing.T) {
+		require.Equal(t, []string{percent.ID}, searchIDs(t, "%"))
+	})
+
+	t.Run("search treats underscore as a literal character", func(t *testing.T) {
+		require.Equal(t, []string{underscore.ID}, searchIDs(t, "_"))
+		require.Equal(t, []string{underscore.ID}, searchIDs(t, "my_app"))
+	})
+
+	t.Run("search treats backslash as a literal character", func(t *testing.T) {
+		require.Equal(t, []string{backslash.ID}, searchIDs(t, `\`))
+	})
+
+	t.Run("blank search matches every url", func(t *testing.T) {
+		all := listUrls(t, app, searchCookies, url.Values{"limit": {"100"}})
+		require.NotEmpty(t, all.Items)
+
+		require.Equal(t, listedUrlIDs(all.Items), searchIDs(t, "   "))
+	})
+
+	t.Run("search only returns the authenticated user's urls", func(t *testing.T) {
+		// The main user has no "Hubble" urls and the search user has no "Bulk" ones.
+		page := listUrls(t, app, cookies, url.Values{"search": {"Hubble"}})
+		require.Empty(t, page.Items)
+
+		page = listUrls(t, app, searchCookies, url.Values{"search": {"Bulk"}})
+		require.Empty(t, page.Items)
+	})
+
+	t.Run("search excludes deleted urls", func(t *testing.T) {
+		deleted := seedSearch("Hubble Deleted", "https://example.com/deleted")
+		require.Contains(t, searchIDs(t, "Hubble Deleted"), deleted.ID)
+
+		resp := doJSON(t, app, http.MethodDelete, "/urls/"+deleted.ID, nil, searchCookies...)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		require.NotContains(t, searchIDs(t, "Hubble Deleted"), deleted.ID)
+	})
+
 	t.Run("rejects multiple sort keys", func(t *testing.T) {
 		resp := doJSON(t, app, http.MethodGet, "/urls?sort=title,-url", nil, cookies...)
 		requireError(t, resp, http.StatusBadRequest, "bad_request")

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"strings"
 	"time"
 	"uuid"
 
@@ -34,9 +35,11 @@ type Service interface {
 	CreateUrl(ctx context.Context, userId uuid.UUID, title, url string, expiresAt time.Time) (*Url, error)
 
 	// GetUserUrls returns a page of the non-deleted urls owned by userId,
-	// filtered by search and ordered by sort. The last* arguments are the
-	// cursor: when lastId is the nil UUID the first page is returned, and
-	// limit caps the page size.
+	// filtered by search and ordered by sort. search is a case-insensitive
+	// substring match against the title and url, so "hub" matches
+	// "github.com/...". An empty search matches every url. The last* arguments
+	// are the cursor: when lastId is the nil UUID the first page is returned,
+	// and limit caps the page size.
 	//
 	// Errors:
 	//   - [ErrInvalidSort]: sort is not a known [UserUrlsSort] value.
@@ -252,6 +255,9 @@ func (me UserUrlsSort) isValid() bool {
 	return false
 }
 
+// likeEscaper escapes the LIKE wildcards so they match literally.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
 func (me *impl) GetUserUrls(
 	ctx context.Context,
 	userId uuid.UUID,
@@ -264,10 +270,9 @@ func (me *impl) GetUserUrls(
 		return nil, ErrInvalidSort
 	}
 
-	// TODO: use FTS using title, url, and alias (see the query)
 	rows, err := me.queries.GetUserUrls(ctx, queries.GetUserUrlsParams{
 		UserId:        userId,
-		Search:        search,
+		Search:        likeEscaper.Replace(strings.TrimSpace(search)),
 		LastTitle:     utils.NullString(lastTitle),
 		LastUrl:       utils.NullString(lastUrl),
 		LastAlias:     utils.NullString(lastAlias),

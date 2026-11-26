@@ -14,7 +14,9 @@ on conflict (alias) do nothing;
 
 -- name: GetUserUrls :many
 select * from shortening.urls
-where user_id = $1 and deleted_at is null and title ilike '%'|| sqlc.arg(search)::varchar || '%' and (
+where user_id = $1 and deleted_at is null
+  and shortening.urls_search_text(title, url) ilike '%' || sqlc.arg(search)::text || '%'
+  and (
   -- The cursor is only present from the second page on. Each sort key resumes
   -- after its own column in its own direction; id is the final tiebreaker and
   -- is always descending (see the order by clause).

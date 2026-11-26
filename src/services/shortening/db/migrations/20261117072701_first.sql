@@ -21,6 +21,22 @@ create table shortening.urls (
 create index shortening_urls_user_id_idx on shortening.urls (user_id);
 create index shortening_urls_deleted_at_idx on shortening.urls (deleted_at) where deleted_at is not null;
 
+create extension if not exists pg_trgm;
+
+-- Searchable text of a url. The fields are joined with a newline, which a
+-- search term never contains, so a match can't span two fields.
+create function shortening.urls_search_text(title varchar, url varchar)
+returns text
+language sql
+immutable
+as $$
+  select title || E'\n' || url
+$$;
+
+create index shortening_urls_search_idx on shortening.urls
+  using gin (shortening.urls_search_text(title, url) gin_trgm_ops)
+  where deleted_at is null;
+
 create table shortening.alias_length (
   length int not null
 );
@@ -28,6 +44,11 @@ create table shortening.alias_length (
 insert into shortening.alias_length (length) values (5);
 
 -- +goose Down
-drop table shortening.alias_length;
-drop table shortening.urls;
-drop schema shortening;
+drop table if exists shortening.alias_length;
+drop index if exists shortening.shortening_urls_search_idx;
+drop index if exists shortening.shortening_urls_deleted_at_idx;
+drop index if exists shortening.shortening_urls_user_id_idx;
+drop function if exists shortening.urls_search_text(varchar, varchar, varchar);
+drop extension if exists pg_trgm;
+drop table if exists shortening.urls;
+drop schema if exists shortening;

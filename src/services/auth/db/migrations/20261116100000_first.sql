@@ -30,6 +30,10 @@ create index auth_sessions_deleted_at_idx on auth.sessions (deleted_at) where de
 
 
 -- +goose Down
-drop table auth.sessions;
-drop table auth.users;
-drop schema auth;
+drop index if exists auth.auth_sessions_deleted_at_idx;
+drop index if exists auth.auth_sessions_expires_at_idx;
+drop index if exists auth.auth_sessions_user_id_idx;
+drop table if exists auth.sessions;
+drop index if exists auth.auth_users_deleted_at_idx;
+drop table if exists auth.users;
+drop schema if exists auth;

@@ -15,5 +15,7 @@ create index idx_redirections_url_id on redirection.redirections (url_id);
 create index idx_redirections_user_id on redirection.redirections (user_id);
 
 -- +goose Down
-drop table redirection.redirections;
-drop schema redirection;
+drop index if exists redirection.idx_redirections_user_id;
+drop index if exists redirection.idx_redirections_url_id;
+drop table if exists redirection.redirections;
+drop schema if exists redirection;
