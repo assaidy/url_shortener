@@ -3,7 +3,7 @@ module github.com/assaidy/url_shortener
 go 1.27.3
 
 require (
-	github.com/assaidy/moon v0.0.0-20261126083925-c71fea78ab95
+	github.com/assaidy/moon v0.0.0-20261127121310-40b269fd8f6e
 	github.com/assaidy/workers v1.7.0
 	github.com/charmbracelet/log v1.0.0
 	github.com/go-ozzo/ozzo-validation/v4 v4.5.0

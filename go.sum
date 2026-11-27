@@ -46,8 +46,8 @@ github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYW
 github.com/antlr4-go/antlr/v4 v4.13.1/go.mod h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmOABFgjdkM7Nw=
 github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d h1:Byv0BzEl3/e6D5CLfI0j/7hiIEtvGVFPCZ7Ei2oq8iQ=
 github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d/go.mod h1:WaHUgvxTVq04UNunO+XhnAqY/wQc+bxr74GqbsZ/Jqw=
-github.com/assaidy/moon v0.0.0-20261126083925-c71fea78ab95 h1:wTPBp7M8DbUR/+LsAiG7yWQ+ekaYMHFI2VkR5GSNmhU=
-github.com/assaidy/moon v0.0.0-20261126083925-c71fea78ab95/go.mod h1:GLM1lLmRKVfNST8E9rwEgLx4o2URTptnUQkacCQOt3o=
+github.com/assaidy/moon v0.0.0-20261127121310-40b269fd8f6e h1:R+qA/BGy4ZcEgQ1PUHqbOA9XiYsn9WobkFYftmBEOwo=
+github.com/assaidy/moon v0.0.0-20261127121310-40b269fd8f6e/go.mod h1:GLM1lLmRKVfNST8E9rwEgLx4o2URTptnUQkacCQOt3o=
 github.com/assaidy/workers v1.7.0 h1:dMeL3pP2o99ri5o9dbsSF1JDWYX/FwuIf1XmIifxSrA=
 github.com/assaidy/workers v1.7.0/go.mod h1:fppOryObpMQBW/+bP2fPd8v8dODBT8EN6VHCjH1Ru5c=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=

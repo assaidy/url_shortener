@@ -132,16 +132,11 @@ func GetRedirections(ctx *moon.Context) error {
 		}
 	}
 
-	sort := paginationInfo.GetSort()
-	if len(sort) != 1 {
-		return moon.ErrBadRequest.WithDetails("only one sort key is allowed")
-	}
-
 	redirectionService := ctx.GetDependency[redirection_service.Service]()
 	redirections, err := redirectionService.GetUserRedirections(
 		ctx,
 		getCurrentSession(ctx).UserId,
-		getRedirectionsSort(sort[0]), // len == 1 always.
+		getRedirectionsSort(paginationInfo.GetSort()[0]), // len == 1 always.
 		cursor.LastCreatedAt,
 		cursor.LastOs,
 		cursor.LastPlatform,
@@ -205,11 +200,6 @@ func GetUrlRedirections(ctx *moon.Context) error {
 		}
 	}
 
-	sort := paginationInfo.GetSort()
-	if len(sort) != 1 {
-		return moon.ErrBadRequest.WithDetails("only one sort key is allowed")
-	}
-
 	// Make sure the url belongs to the current user before exposing its
 	// redirections. The url may be deleted after this check; redirections are
 	// analytics history and remain readable in that case.
@@ -225,7 +215,7 @@ func GetUrlRedirections(ctx *moon.Context) error {
 	redirections, err := redirectionService.GetUrlRedirections(
 		ctx,
 		urlId,
-		getRedirectionsSort(sort[0]), // len == 1 always.
+		getRedirectionsSort(paginationInfo.GetSort()[0]), // len == 1 always.
 		cursor.LastCreatedAt,
 		cursor.LastOs,
 		cursor.LastPlatform,

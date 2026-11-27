@@ -158,17 +158,12 @@ func GetUrls(ctx *moon.Context) error {
 		}
 	}
 
-	sort := paginationInfo.GetSort()
-	if len(sort) != 1 {
-		return moon.ErrBadRequest.WithDetails("only one sort key is allowed")
-	}
-
 	shorteningService := ctx.GetDependency[shortening_service.Service]()
 	urls, err := shorteningService.GetUserUrls(
 		ctx,
 		getCurrentSession(ctx).UserId,
 		ctx.GetQuery("search"),
-		getUserUrlsSort(sort[0]), // len == 1 always.
+		getUserUrlsSort(paginationInfo.GetSort()[0]), // len == 1 always.
 		requestCursor.LastTitle,
 		requestCursor.LastUrl,
 		requestCursor.LastAlias,

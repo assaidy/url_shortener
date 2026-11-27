@@ -10,11 +10,12 @@ import (
 // redirectionPagination is shared by both redirection listing routes, which use
 // the same pagination and sorting policy.
 var redirectionPagination = pagination.New(
-	pagination.WithPageQueryKey(""),
-	pagination.WithOffsetQueryKey(""),
-	pagination.WithSortQueryKey("sort"),
+	pagination.WithCursor(true),
+	pagination.WithLimit(true),
+	pagination.WithSort(true),
 	pagination.WithAllowedSortKeys([]string{"created_at", "os", "platform"}),
 	pagination.WithDefaultSort([]pagination.Sort{{Key: "created_at", Order: pagination.OrderDescending}}),
+	pagination.WithMaxSortKeys(1),
 )
 
 func mapRedirection(app *moon.App) {

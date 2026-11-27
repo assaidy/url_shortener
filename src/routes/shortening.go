@@ -16,11 +16,12 @@ func mapShortening(app *moon.App) {
 		moon.WithMiddlewares(
 			handlers.HasSession,
 			pagination.New(
-				pagination.WithPageQueryKey(""),
-				pagination.WithOffsetQueryKey(""),
-				pagination.WithSortQueryKey("sort"),
+				pagination.WithCursor(true),
+				pagination.WithLimit(true),
+				pagination.WithSort(true),
 				pagination.WithAllowedSortKeys([]string{"title", "url", "alias", "created_at", "clicks"}),
 				pagination.WithDefaultSort([]pagination.Sort{{Key: "created_at", Order: pagination.OrderDescending}}),
+				pagination.WithMaxSortKeys(1),
 			),
 		),
 		moon.WithApiSpec(specs.GetUrls),
