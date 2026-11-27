@@ -22,7 +22,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const urlClickEventConsumers = 4
+const (
+	urlClickEventConsumers = 4
+	maxAliasLength         = 16
+)
 
 // Service manages short urls: creating, listing, updating, deleting, and
 // resolving them by alias.
@@ -183,7 +186,6 @@ func (me *impl) CreateUrl(ctx context.Context, userId uuid.UUID, title, url stri
 
 	id := uuid.NewV7()
 	createdAt := time.Now()
-	var alias string
 
 	var expiresAtPtr *time.Time
 	if !expiresAt.IsZero() {
@@ -192,7 +194,7 @@ func (me *impl) CreateUrl(ctx context.Context, userId uuid.UUID, title, url stri
 
 	for {
 		for range 5 {
-			alias = generateRandomLetters(int(length))
+			alias := generateRandomLetters(int(length))
 			if n, err := me.queries.InsertUrl(ctx, queries.InsertUrlParams{
 				Id:        id,
 				UserId:    userId,
@@ -217,8 +219,11 @@ func (me *impl) CreateUrl(ctx context.Context, userId uuid.UUID, title, url stri
 			}
 		}
 
-		// TODO: cap the alias length so a bug that keeps inserts from succeeding
-		// can't make this loop grow the alias length forever.
+		// All 5 attempts collided at this length.
+		if length >= maxAliasLength {
+			return nil, fmt.Errorf("failed to generate unique alias: reached max length %d", maxAliasLength)
+		}
+
 		length, err = me.queries.IncrementAliasLength(ctx, length)
 		if err != nil {
 			return nil, fmt.Errorf("failed to increment alias length: %w", err)
